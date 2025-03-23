@@ -1,21 +1,22 @@
---%%nameYahueV2
+---@diagnostic disable: undefined-global
+_DEVELOP = "../../hc3emu"
+if require and not QuickApp then require("hc3emu") end
+
+--%%name=YahueV2
 --%%type=com.fibaro.deviceController
+--%%uid=UPD896846032517896
+--%%save=Yahue.fqa
 --%%var=Hue_IP:config.Hue_IP
 --%%var=Hue_User:config.Hue_user
 --%% merge=QAs/HueV2Engine.lua,QAs/HueV2App.lua,QAs/HueV2File.lua
---%%file=QAs/HueV2Engine.lua,Engine;
---%%file=QAs/HueV2App.lua,App;
---%%file=QAs/HueV2Map.lua,Map;
---%%file=lib/BetterQA.lua,BetterQA;
---%% file=QAs/HueV2File.lua,HueV2;
---%% debug=refresh:false
---%%remote=globalVariables:HueScenes
---%%remote=devices:*
---%%fullLua=true
+--%%file=HueV2Engine.lua,Engine;
+--%%file=HueV2App.lua,App;
+--%%file=HueV2Map.lua,Map;
+--%%file=../../fibemu/lib/BetterQA.lua,BetterQA;
+--%% file=HueV2File.lua,HueV2;
 --%%u={label='info', text=''}
 --%%u={button='restart', text='Restart', onReleased='restart'}
 --%%u={button='dump', text='Dump resources', onReleased='dumpResources'}
---%%passThrough=/alarms/v1/partitions/[%d]*/?actions/[tryAa]+rm
 
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE,update

@@ -1,0 +1,15 @@
+{
+  "uid": "UPD896846896",
+  "description": "Yet another Hue plugin",
+  "author": "Author: jan@gabrielsson.com",
+  "versions":
+  [
+    {
+      "tag": "Rel1",
+      "version": "0.47",
+      "description": "New release v0.47",
+      "exclude": [],
+      "date": "2025-03-23"
+    }
+  ]
+}
