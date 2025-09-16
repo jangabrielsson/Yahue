@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Plua: Current Fibaro File",
+      "type": "luaMobDebug",
+      "request": "launch",
+      "workingDirectory": "${workspaceFolder}",
+      "sourceBasePath": "${workspaceFolder}",
+      "listenPort": 8172,
+      "stopOnEntry": false,
+      "sourceEncoding": "UTF-8",
+      "interpreter": "/Users/jangabrielsson/Documents/dev/plua_new/plua/run.sh",
+      "arguments": [
+        "--fibaro",
+        "--run-for",
+        "0",
+        "${relativeFile}"
+      ],
+      "listenPublicly": true
+    }
+  ]
+}

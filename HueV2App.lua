@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local _version = 0.59
+local _version = 0.60
 local serial = "UPD896661234567893"
 HUEv2Engine = HUEv2Engine or {}
 local HUE = HUEv2Engine
@@ -198,6 +198,8 @@ function defClasses()
       end
       self:updateProperty("userDescription",d)
     end
+  end
+  function HueClass:hueCommand(tab)
   end
   function HueClass:print(fmt,...)
     local TAG = __TAG; __TAG = self.pname

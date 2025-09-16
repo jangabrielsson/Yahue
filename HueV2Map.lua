@@ -33,7 +33,7 @@ HUEDevices = {
 -- 'Kitchen island', Zone
  {id='b5f12b5f-20c7-47a5-8535-c7a20fb9e66d', name='Kitchen island', class='RoomZoneQA', enabled=false, args={}},
 -- 'Hall', Room
- {id='bbe472e6-8ea8-477b-a116-ca345452e056', name='Hall', class='RoomZoneQA', enabled=false, args={}},
+ {id='bbe472e6-8ea8-477b-a116-ca345452e056', name='Hall', class='RoomZoneQA', enabled=true, args={}},
 -- 'Living room', Room
  {id='bcd3daec-82a9-4de7-813a-3464beee0090', name='Living room', class='RoomZoneQA', enabled=false, args={}},
 -- 'Front Door', Hue secure contact sensor

@@ -1085,7 +1085,7 @@ local function main()
   
   function _initEngine(ip,key,cb)
     app_key = key
-    url =  fmt("https://%s:443",ip)
+    url =  fmt("https://%s",ip)
     DEBUG('info',"HUEv2Engine v%s",version)
     DEBUG('info',"Hub url: %s",url)
     callBack = function() fetchEvents() if cb then cb() end end
