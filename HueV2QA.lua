@@ -4,7 +4,7 @@
 --%%save:Yahue.fqa
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
---%%merge=QAs/HueV2Engine.lua,QAs/HueV2App.lua,QAs/HueV2File.lua
+--%%merge:HueV2Engine.lua,HueV2App.lua=HueV2File.lua
 --%%file:HueV2Engine.lua,Engine
 --%%file:HueV2App.lua,App
 --%%file:HueV2Map.lua,Map
