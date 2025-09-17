@@ -8,7 +8,7 @@
 --%%file:HueV2Engine.lua,Engine
 --%%file:HueV2App.lua,App
 --%%file:HueV2Map.lua,Map
---%%file:$fibaro.lib.betterqa,BetterQA
+--%% file:$fibaro.lib.betterqa,BetterQA
 -- %%file:HueV2File.lua,HueV2
 --%%u:{label='info', text=''}
 --%%u:{button='restart', text='Restart', onReleased='restart'}
@@ -27,8 +27,9 @@ local function init()
   --fibaro.debugFlags.class=true
   fibaro.debugFlags.event=true
   fibaro.debugFlags.call=true
-  local ip = (self.qvar.Hue_IP or ""):match("(%d+.%d+.%d+.%d+)")
-  local key = self.qvar.Hue_User --:match("(.+)")
+  local ip,key = self:getVariable("Hue_IP"),self:getVariable("Hue_User")
+  ip = ip:match("(%d+.%d+.%d+.%d+)")
+  key = key:match("(.+)")
   assert(ip,"Missing Hue_IP - hub IP address")
   assert(key,"Missing Hue_User - Hue hub key")
 
@@ -45,9 +46,9 @@ function QuickApp:onInit()
   HUE = HUEv2Engine
   function self.initChildDevices() end
   local updated = self:getVariable("update")
-  if self.qvar.update=="yes" then
+  if updated=="yes" then
     self:debug("Updating HueV2App")
-    self.qvar.update="_"
+    self:setVariable("update","_")
     update()
   elseif HUE then init() 
   else self:error("Missing HUE library, set QV update=yes") end
@@ -70,7 +71,7 @@ function update()
     })
   end
   getFile(file1,function(data1)
-    quickApp.qvar.update = os.date("%Y-%m-%d %H:%M:%S")
+    quickApp:setVariable("update",os.date("%Y-%m-%d %H:%M:%S"))
     local stat,err = api.put("/quickApp/"..quickApp.id.."/files",{
       {name="HueV2", isMain=false, isOpen=false, content=data1},
     })
