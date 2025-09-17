@@ -10,7 +10,7 @@
       "listenPort": 8172,
       "stopOnEntry": false,
       "sourceEncoding": "UTF-8",
-      "interpreter": "/Users/jangabrielsson/Documents/dev/plua_new/plua/run.sh",
+      "interpreter": "plua",
       "arguments": [
         "--fibaro",
         "--run-for",

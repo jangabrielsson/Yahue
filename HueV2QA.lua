@@ -4,7 +4,7 @@
 --%%save:Yahue.fqa
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
--- %%merge=QAs/HueV2Engine.lua,QAs/HueV2App.lua,QAs/HueV2File.lua
+--%%merge=QAs/HueV2Engine.lua,QAs/HueV2App.lua,QAs/HueV2File.lua
 --%%file:HueV2Engine.lua,Engine
 --%%file:HueV2App.lua,App
 --%%file:HueV2Map.lua,Map
@@ -59,8 +59,8 @@ function QuickApp:dumpResources()
 end
 
 function update()
-  local baseURL = "https://raw.githubusercontent.com/jangabrielsson/fibemu/master/"
-  local file1 = baseURL.."QAs/HueV2File.lua"
+  local baseURL = "https://raw.githubusercontent.com/jangabrielsson/Yahue/master/"
+  local file1 = baseURL.."HueV2File.lua"
   local function getFile(url,cont)
     quickApp:debug("Fetching "..url)
     net.HTTPClient():request(url,{
