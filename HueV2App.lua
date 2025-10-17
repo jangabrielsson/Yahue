@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.0.61"
+^local VERSION = "0.0.62"
 local serial = "UPD896661234567893"
 HUEv2Engine = HUEv2Engine or {}
 local HUE = HUEv2Engine
