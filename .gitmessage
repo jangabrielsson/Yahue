@@ -1,0 +1,21 @@
+# <type>: <description>
+#
+# Type can be:
+#   feat:     A new feature
+#   fix:      A bug fix
+#   docs:     Documentation only changes
+#   style:    Changes that do not affect the meaning of the code
+#   refactor: A code change that neither fixes a bug nor adds a feature
+#   perf:     A code change that improves performance
+#   test:     Adding missing tests or correcting existing tests
+#   chore:    Changes to the build process or auxiliary tools
+#
+# Examples:
+#   feat: add device auto-discovery
+#   fix: resolve connection timeout issue
+#   docs: update API documentation
+#   refactor: simplify authentication logic
+#
+# Write a clear, concise description in present tense
+# Wrap at 72 characters
+# ────────────────────────────────────────────────────────────────────────
