@@ -1,4 +1,3 @@
-------- QAs/HueV2Engine.lua ----------
 --[[
 GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
@@ -423,7 +422,7 @@ local function main()
   
   props.contact = {
     contact_report={
-      get=function(r) return r.contact_report.state end,
+      get=function(r) return (r.contact_report or {}).state or "off" end,
       set=function(r,v) r.contact_report.state=v end,
       changed=function(o,n) return o.contact_report.state~=n.contact_report.state,n.contact_report.state end,
     },
@@ -632,7 +631,7 @@ local function main()
   
   props.camera_motion = {
     motion={
-      get=function(r) return r.motion.motion_report.motion end,
+      get=function(r) return (r.motion.motion_report or {}).motion or false end,
       set=function(r,v) r.motion.motion_report.motion=v end,
       changed=function(o,n) return o.motion.motion_report.motion~=n.motion.motion_report.motion,n.motion.motion_report.motion end
     },
@@ -642,7 +641,7 @@ local function main()
     hueResource.__init(self,id)
   end
   function camera_motion:motion()
-    return self.rsrc.motion.motion_report.motion
+    return (self.rsrc.motion.motion_report or {}).motion or false
   end
   function camera_motion:__tostring()
     return fmt("[camera_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion())
@@ -650,7 +649,7 @@ local function main()
   
   props.light_level = {
     light={
-      get=function(r) return r.light.light_level_report.light_level end,
+      get=function(r) return (r.light.light_level_report or {}).light_level or 0 end,
       set=function(r,v) r.light.light_level_report.light_level=v end,
       changed=function(o,n) return o.light.light_level_report.light_level~=n.light.light_level_report.light_level,n.light.light_level_report.light_level end,
     },
@@ -660,7 +659,7 @@ local function main()
     hueResource.__init(self,id)
   end
   function light_level:light_level()
-    return self.rsrc.light.light_level_report.light_level
+    return (self.rsrc.light.light_level_report or {}).light_level or 0
   end
   function light_level:__tostring()
     return fmt("[light_level:%s,%s,value:%s]",self.id,self:getName(),self:light_level())
@@ -1086,7 +1085,7 @@ local function main()
   
   function _initEngine(ip,key,cb)
     app_key = key
-    url =  fmt("https://%s:443",ip)
+    url =  fmt("https://%s",ip)
     DEBUG('info',"HUEv2Engine v%s",version)
     DEBUG('info',"Hub url: %s",url)
     callBack = function() fetchEvents() if cb then cb() end end
@@ -1101,13 +1100,12 @@ function HUEv2Engine:init(ip,key,cb)
   _initEngine(ip,key,cb)
 end
 
-------- QAs/HueV2App.lua ----------
 ---@diagnostic disable: undefined-global
 ------- QAs/HueV2App.lua ----------
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local _version = 0.59
+local _version = 0.60
 local serial = "UPD896661234567893"
 HUEv2Engine = HUEv2Engine or {}
 local HUE = HUEv2Engine
@@ -1156,6 +1154,7 @@ function HUEv2Engine:app()
         print(ok,"->",dev.name)
         local tag = cls..":"..id
         ddevices[tag] = {
+          name = dev.name,
           id = id,
           class = cls,
           enabled = childDevices[tag] or false,
@@ -1167,6 +1166,7 @@ function HUEv2Engine:app()
   for id,zr in pairs(HUE:getResourceType('zone')) do
     local tag = "RoomZoneQA:"..id
     ddevices[tag] = {
+      name = zr.name or tag,
       id = id,
       class = "RoomZoneQA",
       enabled = childDevices[tag] or false,
@@ -1176,6 +1176,7 @@ function HUEv2Engine:app()
   for id,zr in pairs(HUE:getResourceType('room')) do
     local tag = "RoomZoneQA:"..id
     ddevices[tag] = {
+      name = zr.name or tag,
       id = id,
       class = "RoomZoneQA",
       enabled = childDevices[tag] or false,
@@ -1190,7 +1191,7 @@ function HUEv2Engine:app()
   
   local regenerate = false
   for id,_ in pairs(hdevs) do
-    if not ddevices[id] then hdevs[id] = nil regenerate=true end
+    if (not hdevs[id].name) or (not ddevices[id]) then hdevs[id] = nil regenerate=true end
   end
   for id,dev in pairs(ddevices) do
     if not hdevs[id] then hdevs[id] = dev regenerate=true end
@@ -1218,7 +1219,7 @@ function HUEv2Engine:app()
         b:printf("-- '%s', %s\n",d.name,d.resourceName or "<N/A")
         i = d.id
       end
-      b:printf(" {id='%s', class='%s', enabled=%s, args=%s},\n",dev.id,dev.class,dev.enabled,encodeArgs(dev.args))
+      b:printf(" {id='%s', name='%s', class='%s', enabled=%s, args=%s},\n",dev.id,dev.name,dev.class,dev.enabled,encodeArgs(dev.args))
     end
     
     b:printf("}\n")
@@ -1299,6 +1300,8 @@ function defClasses()
       end
       self:updateProperty("userDescription",d)
     end
+  end
+  function HueClass:hueCommand(tab)
   end
   function HueClass:print(fmt,...)
     local TAG = __TAG; __TAG = self.pname
@@ -1592,122 +1595,120 @@ end
 
 ----------- Child class
 do
+  local VERSION = "1.0"
+  print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
   local classID = 'ClassName'
-  local defChildren
-  
+
   local children = {}
-  local undefinedChildren = {}
   local createChild = QuickApp.createChildDevice
+  function QuickApp:initChildDevices() end
+  QuickApp.debugQwikAppChild = true
+
   class 'QwikAppChild'(QuickAppChild)
-  
+
   local fmt = string.format
-  
-  local function setupUIhandler(self)
-    if not self.UIHandler then
-      function self:UIHandler(event)
-        local obj = self
-        if self.id ~= event.deviceId then obj = (self.childDevices or {})[event.deviceId] end
-        if not obj then return end
-        local elm,etyp = event.elementName, event.eventType
-        local cb = obj.uiCallbacks or {}
-        if obj[elm] then return obj:callAction(elm, event) end
-        if cb[elm] and cb[elm][etyp] and obj[cb[elm][etyp]] then return obj:callAction(cb[elm][etyp], event) end
-        if obj[elm.."Clicked"] then return obj:callAction(elm.."Clicked", event) end
-        self:warning("UI callback for element:", elm, " not found-")
-      end
-    end
+
+  local function getVar(deviceId,key)
+    local res, stat = api.get("/plugins/" .. deviceId .. "/variables/" .. key)
+    if stat ~= 200 then return nil end
+    return res.value
   end
-  
+
   local UID = nil
   function QwikAppChild:__init(device)
     QuickAppChild.__init(self, device)
-    self:debug(fmt("Instantiating ID:%s '%s'",device.id,device.name))
     local uid = UID or self:internalStorageGet(childID) or ""
     self._uid = uid
-    if defChildren[uid] then
-      children[uid]=self               -- Keep table with all children indexed by uid. uid is unique.
-    else                               -- If uid not in our children table, we will remove this child
-      undefinedChildren[#undefinedChildren+1]=self.id
-    end
+    children[uid]=self
     self._sid = tonumber(uid:match("(%d+)$"))
   end
-  
-  function QuickApp:createChildDevice(uid,props,interfaces,className)
+
+  function QuickApp:createChildDevice0(uid,props,interfaces,className)
     __assert_type(uid,'string')
     __assert_type(className,'string')
     props.initialProperties = props.initialProperties or {}
     props.initialInterfaces = interfaces
-    --self:debug("Creating device ",props.name)
     UID = uid
     local c = createChild(self,props,_G[className])
     UID = nil
     if not c then return end
     c:internalStorageSet(childID,uid,true)
     c:internalStorageSet(classID,className,true)
+    return c
   end
-  
+
   function QuickApp:loadExistingChildren(chs)
     __assert_type(chs,'table')
     local rerr = false
     local stat,err = pcall(function()
-      defChildren = chs
       self.children = children
-      function self.initChildDevices() end
       local cdevs,n = api.get("/devices?parentId="..self.id) or {},0 -- Pick up all my children
       for _,child in ipairs(cdevs) do
         local uid = getVar(child.id,childID)
         local className = getVar(child.id,classID)
-        print(child.id,uid,className)
         local childObject = nil
-        local stat,err = pcall(function()
-          childObject = _G[className] and _G[className](child) or QuickAppChild(child)
-          self.childDevices[child.id]=childObject
-          childObject.parent = self
-        end)
-        if not stat then
-          self:error("loadExistingChildren:"..err)
-          rerr=true
+        if chs[uid] then
+          if QuickApp.debugQwikAppChild then
+            self:debug(fmt("Loading existing child UID:'%s'",uid))
+          end
+          local stat,err = pcall(function()
+            childObject = _G[className] and _G[className](child) or QuickAppChild(child)
+            self.childDevices[child.id] = childObject
+            childObject.parent = self
+          end)
+          if not stat then
+            self:error(fmt("loadExistingChildren:%s child UID:%s",err,uid))
+            rerr=true
+          end
         end
       end
     end)
     if not stat then rerr=true self:error("loadExistingChildren:"..err) end
     return rerr
   end
-  
-  function QuickApp:createMissingChildren()
+
+  function QuickApp:createMissingChildren(children)
     local stat,err = pcall(function()
       local chs,k = {},0
-      for uid,data in pairs(defChildren) do
+      for uid,data in pairs(children) do
         local m = uid:sub(1,1)=='i' and 100 or 0
         k = k + 1
         chs[#chs+1]={uid=uid,id=m+tonumber(uid:match("(%d+)$") or k),data=data}
       end
       table.sort(chs,function(a,b) return a.id<b.id end)
       for _,ch in ipairs(chs) do
-        if not self.children[ch.uid] then
+        if not self.children[ch.uid] then -- not loaded yet
+          if QuickApp.debugQwikAppChild then
+            self:debug(fmt("Creating missing child UID:'%s'",ch.uid))
+          end
           local props = {
             name = ch.data.name,
             type = ch.data.type,
             initialProperties = ch.data.properties,
           }
-          self:createChildDevice(ch.uid,props,ch.data.interfaces,ch.data.className)
+          self:createChildDevice0(ch.uid,props,ch.data.interfaces,ch.data.className)
         end
       end
     end)
     if not stat then self:error("createMissingChildren:"..err) end
   end
-  
-  function QuickApp:removeUndefinedChildren()
-    for _,deviceId in ipairs(undefinedChildren) do -- Remove children not in children table
-      self:removeChildDevice(deviceId)
+
+  function QuickApp:removeUndefinedChildren(children)
+    local cdevs = api.get("/devices?parentId="..self.id)
+    for _,child in ipairs(cdevs) do
+      if not self.childDevices[child.id] then
+        if QuickApp.debugQwikAppChild then
+          self:debug(fmt("Deleting undefined child ID:%s",child.id))
+        end
+        api.delete("/plugins/removeChildDevice/" .. child.id)
+      end
     end
   end
-  
+
   function QuickApp:initChildren(children)
-    setupUIhandler(self)
     if self:loadExistingChildren(children) then return end
-    self:createMissingChildren()
-    self:removeUndefinedChildren()
+    self:createMissingChildren(children)
+    self:removeUndefinedChildren(children) -- Remove child devices not loaded/created
   end
 end
