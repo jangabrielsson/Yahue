@@ -1,7 +1,7 @@
---%%name:YahueV2
+--%%name:Yahue
 --%%type:com.fibaro.deviceController
 --%%uid:UPD896846032517896
---%%save:Yahue.fqa
+--%%save:dist/Yahue.fqa
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
 -- %%merge=QAs/HueV2Engine.lua,QAs/HueV2App.lua,QAs/HueV2File.lua

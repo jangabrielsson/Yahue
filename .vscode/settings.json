@@ -4,5 +4,13 @@
   "git.inputValidation": true,
   "git.inputValidationLength": 72,
   "git.inputValidationSubjectLength": 50,
-  "scm.inputFontFamily": "SF Mono, Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace"
+  "scm.inputFontFamily": [
+    "SF Mono",
+    "Monaco",
+    "Cascadia Code",
+    "Roboto Mono",
+    "Consolas",
+    "Courier New",
+    "monospace"
+  ]
 }

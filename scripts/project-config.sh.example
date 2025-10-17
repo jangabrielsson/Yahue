@@ -1,0 +1,187 @@
+#!/bin/bash
+
+# Project Configuration Template for Release Scripts
+# Copy this file to project-config.sh and customize for your project
+# This example shows a typical Lua QuickApp project configuration
+
+# ============================================================================
+# PROJECT IDENTIFICATION
+# ============================================================================
+
+# Project name (used in messages and titles)
+PROJECT_NAME="MyLuaProject"
+
+# GitHub repository (format: owner/repo)
+GITHUB_REPO="yourusername/myluaproject"
+
+# Forum thread URL (optional - leave empty if not applicable)
+# Example: "https://forum.fibaro.com/topic/12345-my-project/"
+FORUM_URL=""
+
+# ============================================================================
+# VERSION MANAGEMENT
+# ============================================================================
+
+# Version file location (relative to project root)
+VERSION_FILE=".version"
+
+# Source files that contain version declarations
+# Format: "path:pattern" where pattern is the sed search pattern
+# The pattern should match the line containing VERSION = "x.y.z"
+# Examples:
+#   For: local VERSION = "1.0.0"
+#   Use: "src/main.lua:^local VERSION"
+#
+#   For: VERSION = "1.0.0"
+#   Use: "src/main.lua:^VERSION"
+declare -a VERSION_FILES=(
+    "src/main.lua:^local VERSION"
+    "src/utils.lua:^local VERSION"
+)
+
+# ============================================================================
+# ARTIFACT GENERATION
+# ============================================================================
+
+# Directory for build artifacts (relative to project root)
+DIST_DIR="dist"
+
+# Artifacts to build
+# Format: "source_file:output_file:build_command"
+# The build_command can use {SOURCE} and {OUTPUT} placeholders
+# 
+# Common examples:
+#   - Fibaro .fqa files: "plua -t pack {SOURCE} {OUTPUT}"
+#   - Zip archives: "zip -j {OUTPUT} {SOURCE}"
+#   - Copy files: "cp {SOURCE} {OUTPUT}"
+#
+# Multiple artifacts example:
+declare -a ARTIFACTS=(
+    "src/main.lua:dist/MyProject.fqa:plua -t pack {SOURCE} {OUTPUT}"
+    "src/addon.lua:dist/MyAddon.fqa:plua -t pack {SOURCE} {OUTPUT}"
+)
+
+# Files to include in git commits for releases
+# Add all files that should be committed during the release process
+declare -a RELEASE_FILES=(
+    ".version"
+    "CHANGELOG.md"
+    "src/main.lua"
+    "src/utils.lua"
+    "dist/MyProject.fqa"
+    "dist/MyAddon.fqa"
+)
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+# Directory for release notes/forum posts (relative to project root)
+NOTES_DIR="doc/notes"
+
+# Main documentation file URL
+DOCUMENTATION_URL="https://github.com/$GITHUB_REPO/blob/main/README.md"
+
+# ============================================================================
+# RELEASE CUSTOMIZATION
+# ============================================================================
+
+# Commit message template for releases
+# Variables: {VERSION}, {NOTES}
+RELEASE_COMMIT_TEMPLATE="chore: release v{VERSION}
+
+- Update version to {VERSION} in all files
+- Update CHANGELOG.md with release notes
+- Generate release artifacts"
+
+# Tag message template
+# Variables: {VERSION}, {NOTES}
+TAG_MESSAGE_TEMPLATE="Release v{VERSION}
+
+{NOTES}"
+
+# ============================================================================
+# OPTIONAL HOOKS
+# ============================================================================
+
+# Pre-release hook (optional) - runs before any release operations
+# Uncomment and customize if needed
+# pre_release_hook() {
+#     echo "Running pre-release checks..."
+#     # Example: Run tests
+#     # npm test || return 1
+#     # Example: Build documentation
+#     # make docs || return 1
+#     return 0
+# }
+
+# Post-release hook (optional) - runs after successful release
+# Uncomment and customize if needed
+# post_release_hook() {
+#     local version=$1
+#     echo "Running post-release actions for v$version..."
+#     # Example: Notify team
+#     # curl -X POST https://hooks.slack.com/... -d "New release: v$version"
+#     # Example: Deploy to server
+#     # ./deploy.sh $version
+#     return 0
+# }
+
+# Artifact build hook (optional) - custom artifact generation
+# Uncomment and customize if needed
+# custom_artifact_build() {
+#     echo "Building custom artifacts..."
+#     # Example: Create additional files
+#     # cp README.md dist/
+#     # tar -czf dist/source.tar.gz src/
+#     return 0
+# }
+
+# ============================================================================
+# HELPER FUNCTIONS (DO NOT MODIFY)
+# ============================================================================
+
+get_artifact_files() {
+    local files=()
+    for artifact in "${ARTIFACTS[@]}"; do
+        IFS=':' read -r source output command <<< "$artifact"
+        if [ -f "$output" ]; then
+            files+=("$output")
+        fi
+    done
+    echo "${files[@]}"
+}
+
+get_artifact_names() {
+    local names=()
+    for artifact in "${ARTIFACTS[@]}"; do
+        IFS=':' read -r source output command <<< "$artifact"
+        names+=("$(basename "$output")")
+    done
+    echo "${names[@]}"
+}
+
+validate_config() {
+    local errors=0
+    
+    if [ -z "$PROJECT_NAME" ]; then
+        echo "Error: PROJECT_NAME is not set"
+        ((errors++))
+    fi
+    
+    if [ -z "$GITHUB_REPO" ]; then
+        echo "Error: GITHUB_REPO is not set"
+        ((errors++))
+    fi
+    
+    if [ -z "$VERSION_FILE" ]; then
+        echo "Error: VERSION_FILE is not set"
+        ((errors++))
+    fi
+    
+    return $errors
+}
+
+export -f get_artifact_files
+export -f get_artifact_names
+export -f validate_config
