@@ -1,8 +1,18 @@
-# <type>: <description>
+# <type>: <specific description of what changed>
+#
+# AVOID generic messages like:
+# ❌ "Implement feature X to enhance user experience"
+# ❌ "Fix bug Y in module Z"
+# ❌ "Update code to improve functionality"
+#
+# USE specific, actionable descriptions:
+# ✅ "feat: add Hue bridge auto-discovery via mDNS"
+# ✅ "fix: handle missing device response in HueV2Engine"
+# ✅ "refactor: extract authentication logic to separate method"
 #
 # Type can be:
-#   feat:     A new feature
-#   fix:      A bug fix
+#   feat:     A new feature (add X, implement Y)
+#   fix:      A bug fix (resolve X, handle Y, prevent Z)
 #   docs:     Documentation only changes
 #   style:    Changes that do not affect the meaning of the code
 #   refactor: A code change that neither fixes a bug nor adds a feature
@@ -10,12 +20,19 @@
 #   test:     Adding missing tests or correcting existing tests
 #   chore:    Changes to the build process or auxiliary tools
 #
-# Examples:
-#   feat: add device auto-discovery
-#   fix: resolve connection timeout issue
-#   docs: update API documentation
-#   refactor: simplify authentication logic
+# Project-specific examples for HueV2:
+#   feat: add dimmer support for Hue bulbs
+#   feat: implement scene activation via QuickApp
+#   fix: resolve bridge connection timeout after 30s
+#   fix: handle missing light state in device sync
+#   refactor: simplify HueV2Engine device initialization
+#   perf: cache device states to reduce API calls
+#   docs: add installation guide for Hue bridge setup
 #
-# Write a clear, concise description in present tense
-# Wrap at 72 characters
+# Guidelines:
+# - Be specific about WHAT changed, not WHY
+# - Use present tense ("add" not "added")
+# - Include relevant component names (HueV2Engine, bridge, etc.)
+# - Mention specific functions/methods when relevant
+# - Keep under 50 characters for the subject line
 # ────────────────────────────────────────────────────────────────────────

@@ -12,6 +12,18 @@ We follow conventional commits to generate meaningful release notes. Each commit
 [optional footer]
 ```
 
+### ❌ AVOID Generic Messages
+- "Implement feature X to enhance user experience"
+- "Fix bug Y in module Z"  
+- "Update code to improve functionality"
+- "Enhance performance and fix issues"
+
+### ✅ USE Specific Descriptions
+- "feat: add Hue bridge auto-discovery via mDNS"
+- "fix: handle null response in HueV2Engine.getDevices()"
+- "refactor: extract HTTP client to separate module"
+- "perf: cache device states to reduce API calls"
+
 ### Types
 - **feat**: A new feature
 - **fix**: A bug fix  

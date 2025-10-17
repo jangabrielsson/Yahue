@@ -12,5 +12,13 @@
     "Consolas",
     "Courier New",
     "monospace"
-  ]
+  ],
+  "github.copilot.enable": {
+    "*": true,
+    "scm": true
+  },
+  "scm.experimental.showCommitInput": true,
+  "git.enableSmartCommit": false,
+  "git.verboseCommit": true,
+  "git.confirmSync": false
 }
