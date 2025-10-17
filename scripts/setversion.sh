@@ -83,23 +83,3 @@ for file_config in "${VERSION_FILES[@]}"; do
         echo "  $filepath: $(grep "$pattern" "$filepath")"
     fi
 done
-
-echo ""
-echo "Version update complete! 🎉"
-echo "Files updated with version: $NEW_VERSION"
-
-# Show what was changed
-echo ""
-echo "Changed files:"
-if [ -f ".version" ]; then
-    echo "  .version: $(cat .version)"
-fi
-if [ -f "src/rule.lua" ] && grep -q "^local VERSION" src/rule.lua; then
-    echo "  src/rule.lua: $(grep "^local VERSION" src/rule.lua)"
-fi
-if [ -f "src/eventrunner.lua" ] && grep -q "^local VERSION" src/eventrunner.lua; then
-    echo "  src/eventrunner.lua: $(grep "^local VERSION" src/eventrunner.lua)"
-fi
-if [ -f "src/updater.lua" ] && grep -q "^local VERSION" src/updater.lua; then
-    echo "  src/updater.lua: $(grep "^local VERSION" src/updater.lua)"
-fi

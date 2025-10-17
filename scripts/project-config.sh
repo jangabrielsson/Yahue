@@ -26,9 +26,9 @@ VERSION_FILE=".version"
 
 # Source files that contain version declarations
 # Format: "path:pattern" where pattern is the sed search pattern
-# Example: "src/main.lua:^local VERSION"
+# Example: "src/main.lua:local VERSION"
 declare -a VERSION_FILES=(
-    "HueV2App.lua:^local VERSION"
+    "HueV2App.lua:local VERSION"
 )
 
 # ============================================================================
