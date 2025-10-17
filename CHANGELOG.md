@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.0.68] - 2025-10-17
+
+## Changes in v0.0.68
+
+- ✨ **Feature**: add forum post helper for release v0.0.62 with copy functionality
+- 🐛 **Fix**: resolve setversion.sh script issues
+  - Remove literal '^' character from HueV2App.lua VERSION line
+  - Fix project-config.sh to use correct pattern without regex anchor
+  - Remove duplicate hardcoded file checks from setversion.sh
+  - Script now properly updates version and displays changes
+  - Fixes issue where '^local VERSION' was treated as literal text
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.62] - 2025-10-17
 
 ## Changes in v0.0.62

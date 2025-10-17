@@ -1,83 +1,615 @@
-{"type":"com.fibaro.deviceController","name":"Yahue","apiVersion":"1.3","files":[{"type":"lua","name":"main","content":"--%%name:Yahue
---%%type:com.fibaro.deviceController
---%%uid:UPD896846032517896
---%%save:YahueV2.fqa
---%%var:Hue_IP=config.Hue_ip
---%%var:Hue_User=config.Hue_user
---%%merge:HueV2Engine.lua,HueV2App.lua=HueV2File.lua
---%%file:HueV2Engine.lua,Engine
---%%file:HueV2App.lua,App
---%%file:HueV2Map.lua,Map
---%% file:$fibaro.lib.betterqa,BetterQA
--- %%file:HueV2File.lua,HueV2
---%%u:{label='info', text=''}
---%%u:{button='restart', text='Restart', onReleased='restart'}
---%%u:{button='dump', text='Dump resources', onReleased='dumpResources'}
---%%desktop:true
-
+{"type":"com.fibaro.deviceController","name":"Yahue","apiVersion":"1.3","files":[{"type":"lua","name":"App","content":"---@diagnostic disable: undefined-global
+------- QAs/HueV2App.lua ----------
 fibaro.debugFlags = fibaro.debugFlags or {}
-local HUE,update
+local HUE
 
-local function init()
-  local self = quickApp
-  self:debug(HUE.appName,HUE.appVersion)
-  self:updateView(\"info\",\"text\",HUE.appName..\" v\"..HUE.appVersion)
+local VERSION = \"0.0.68\"
+local serial = \"UPD896661234567893\"
+HUEv2Engine = HUEv2Engine or {}
+local HUE = HUEv2Engine
+HUE.appName = \"YahueV2\"
+HUE.appVersion = tostring(_version)
 
-  fibaro.debugFlags.info=true
-  --fibaro.debugFlags.class=true
-  fibaro.debugFlags.event=true
-  fibaro.debugFlags.call=true
-  local ip,key = self:getVariable(\"Hue_IP\"),self:getVariable(\"Hue_User\")
-  ip = ip:match(\"(%d+.%d+.%d+.%d+)\")
-  key = key:match(\"(.+)\")
-  assert(ip,\"Missing Hue_IP - hub IP address\")
-  assert(key,\"Missing Hue_User - Hue hub key\")
-
-  HUE:init(ip,key,function()
-    --HUEv2Engine:dumpDevices()
-    --HUE:dumpDeviceTable()
-    --HUE:listAllDevicesGrouped()
-    HUE:app()
-    end)
+local function ROUND(i) return math.floor(i+0.5) end
+local function printf(fmt,...) print(string.format(fmt,...)) end
+local function keys(t) local r = {} for k,v in pairs(t) do r[#r+1]=k end return r end
+local function values(t) local r = {} for k,v in pairs(t) do r[#r+1]=v end return r end
+local argsMap = {}
+local function getVar(id,key)
+  local res, stat = api.get(\"/plugins/\" .. id .. \"/variables/\" .. key)
+  if stat ~= 200 then return nil end
+  return res.value
 end
 
-function QuickApp:onInit()
-  quickApp = self
-  HUE = HUEv2Engine
-  function self.initChildDevices() end
-  local updated = self:getVariable(\"update\")
-  if updated==\"yes\" then
-    self:debug(\"Updating HueV2App\")
-    self:setVariable(\"update\",\"_\")
-    update()
-  elseif HUE then init() 
-  else self:error(\"Missing HUE library, set QV update=yes\") end
-end
+local devProps = {
+  temperature = \"TemperatureSensor\",
+  relative_rotary = \"MultilevelSensor\",
+  button = \"Button\",
+  light = \"LuxSensor\",
+  contact_report = \"DoorSensor\",
+  motion = \"MotionSensor\",
+  [function(p) return p.on and not (p.color or p.dimming) and \"plug\" end] = \"BinarySwitch\",
+}
 
-function QuickApp:restart() plugin.restart() end
-function QuickApp:dumpResources() 
-  if HUE then HUE:listAllDevicesGrouped() end
-end
+local defClasses
 
-function update()
-  local baseURL = \"https://raw.githubusercontent.com/jangabrielsson/Yahue/master/\"
-  local file1 = baseURL..\"HueV2File.lua\"
-  local function getFile(url,cont)
-    quickApp:debug(\"Fetching \"..url)
-    net.HTTPClient():request(url,{
-      options = { method = 'GET', checkCertificate=false, timeout=20000},
-      success = function(resp) cont(resp.data) end,
-      error = function(err) fibaro.error(__TAG,\"Fetching \"..err) end
-    })
+function HUEv2Engine:app()
+  defClasses()
+  local childDevices = {}
+  for _,c in ipairs(api.get(\"/devices?parentId=\"..quickApp.id) or {}) do
+    local uid = getVar(c.id,\"ChildID\")
+    if uid then childDevices[uid]=true end
   end
-  getFile(file1,function(data1)
-    quickApp:setVariable(\"update\",os.date(\"%Y-%m-%d %H:%M:%S\"))
-    local stat,err = api.put(\"/quickApp/\"..quickApp.id..\"/files\",{
-      {name=\"HueV2\", isMain=false, isOpen=false, content=data1},
-    })
-    setTimeout(init,0)
-  end)
-end","isMain":true,"isOpen":false},{"type":"lua","name":"Engine","content":"--[[
+  --print(json.encode(childDevices))
+  local ddevices = {}
+  for id,dev in pairs(HUE:getResourceType('device')) do
+    dev = HUE:getResource(id)
+    local props,ok = dev:getProps()
+    for p,cls in pairs(devProps) do
+      if type(p) == 'function' then ok = p(props)
+      else ok = props[p] and p end
+      if ok then
+        print(ok,\"->\",dev.name)
+        local tag = cls..\":\"..id
+        ddevices[tag] = {
+          name = dev.name,
+          id = id,
+          class = cls,
+          enabled = childDevices[tag] or false,
+          args = {}
+        }
+      end
+    end
+  end
+  for id,zr in pairs(HUE:getResourceType('zone')) do
+    local tag = \"RoomZoneQA:\"..id
+    ddevices[tag] = {
+      name = zr.name or tag,
+      id = id,
+      class = \"RoomZoneQA\",
+      enabled = childDevices[tag] or false,
+      args = {}
+    }
+  end
+  for id,zr in pairs(HUE:getResourceType('room')) do
+    local tag = \"RoomZoneQA:\"..id
+    ddevices[tag] = {
+      name = zr.name or tag,
+      id = id,
+      class = \"RoomZoneQA\",
+      enabled = childDevices[tag] or false,
+      args = {}
+    }
+  end
+  
+  local hdevs = {}
+  for _,d in ipairs(HUEDevices) do
+    hdevs[d.class..\":\"..d.id] = d
+  end
+  
+  local regenerate = false
+  for id,_ in pairs(hdevs) do
+    if (not hdevs[id].name) or (not ddevices[id]) then hdevs[id] = nil regenerate=true end
+  end
+  for id,dev in pairs(ddevices) do
+    if not hdevs[id] then hdevs[id] = dev regenerate=true end
+  end
+  
+  local function encodeArgs(t)
+    if type(t)~='table' then return \"{}\" end
+    local p = fibaro.printBuffer()
+    for k,v in pairs(t) do
+      p:printf(\"%s='%s',\",k,tostring(v))
+    end
+    return \"{\"..p:tostring()..\"}\"
+  end
+  
+  if regenerate then
+    print(\"Regenerating map file\")
+    local b = fibaro.printBuffer()
+    local hhdevs = values(hdevs)
+    table.sort(hhdevs,function(a,b) return a.id < b.id end)
+    b:printf(\"\\nHUEDevices = {\\n\")
+    local i = \"\"
+    for _,dev in pairs(hhdevs) do
+      local d = HUE:getResource(dev.id)
+      if d.id ~= i then
+        b:printf(\"-- '%s', %s\\n\",d.name,d.resourceName or \"<N/A\")
+        i = d.id
+      end
+      b:printf(\" {id='%s', name='%s', class='%s', enabled=%s, args=%s},\\n\",dev.id,dev.name,dev.class,dev.enabled,encodeArgs(dev.args))
+    end
+    
+    b:printf(\"}\\n\")
+    print(b:tostring())
+    
+    if fibaro.fibemu then
+      local data = b:tostring()
+      local f = io.open(\"QAs/HueV2Map.lua\",\"w\")
+      if f then
+        f:write(data)
+        f:close()
+      end
+      data = \"return function() \"..data..\" return HUEDevices end\"
+      HUEDevices = load(data)()()
+    else
+      if not api.put(\"/quickApp/\"..quickApp.id..\"/files/Map\",{
+        name=\"Map\", isMain=false, isOpem=false, content=b:tostring()
+      }) then
+        api.post(\"/quickApp/\"..quickApp.id..\"/files\",{
+          name=\"Map\", isMain=false, isOpem=false, content=b:tostring()
+        })
+      end
+    end
+    hdevs = {}
+    for _,d in ipairs(HUEDevices) do
+      hdevs[d.class..\":\"..d.id] = d
+    end
+  end
+  
+  local children = {}
+  for id,data in pairs(hdevs) do
+    argsMap[id]=data
+    if data.enabled then
+      local dev = HUE:getResource(data.id)
+      children[id] = {
+        name = dev.name,
+        type = data.type or _G[data.class].htype,
+        className = data.class,
+        interfaces = dev:getProps()['power_state'] and {'battery'} or nil,
+      }
+      if true then
+        _G[data.class].annotate(children[id])
+      end
+    end
+  end
+  
+  quickApp:initChildren(children)
+end
+
+function defClasses()
+  print(\"Defining QA classes\")
+  
+  class 'HueClass'(QwikAppChild)
+  function HueClass:__init(dev)
+    QwikAppChild.__init(self,dev)
+    self.uid = self._uid:match(\".-:(.*)\")
+    self.dev = HUE:getResource(self.uid)
+    self.pname = \"CHILD\"..self.id
+    local props = self.dev:getProps()
+    self.dev:subscribe(\"status\",function(key,value,b)
+      self:print(\"status %s\",value)
+      if value ~= 'connected' then
+        self:updateProperty(\"dead\",true)
+      end
+      self:updateProperty(\"dead\",value~='connected')
+    end)
+    self.dev:subscribe(\"power_state\",function(key,value,b)
+      self:print(\"battery %s\",value.battery_level)
+      self:updateProperty(\"batteryLevel\",value.battery_level)
+    end)
+    if self.properties.userDescription == nil or self.properties.userDescription == \"\" then
+      local fmt = string.format
+      local d = fmt(\"%s\\n%s\",self.dev.type,self.dev.id)
+      print(d)
+      if self.dev.product_data then
+        local pd = self.dev.product_data
+        d = d..fmt(\"\\n%s\\n%s\",pd.product_name or \"\",pd.model_id or \"\")
+      end
+      self:updateProperty(\"userDescription\",d)
+    end
+  end
+  function HueClass:hueCommand(tab)
+  end
+  function HueClass:print(fmt,...)
+    local TAG = __TAG; __TAG = self.pname
+    self:debug(string.format(fmt,...))
+    __TAG = TAG
+  end
+  
+  class 'TemperatureSensor'(HueClass)
+  TemperatureSensor.htype = \"com.fibaro.temperatureSensor\"
+  function TemperatureSensor:__init(device)
+    HueClass.__init(self,device)
+    self.dev:subscribe(\"temperature\",function(key,value,b)
+      self:print(\"temperature %s\",value)
+      self:updateProperty(\"value\",value)
+    end)
+    self.dev:publishAll()
+  end
+  function TemperatureSensor.annotate() end
+  
+  class 'BinarySwitch'(HueClass)
+  BinarySwitch.htype = \"com.fibaro.binarySwitch\"
+  function BinarySwitch:__init(device)
+    HueClass.__init(self,device)
+    self.dev:subscribe(\"on\",function(key,value,b)
+      self:print(\"on %s\",value)
+      self:updateProperty(\"value\",value)
+    end)
+    self.dev:publishAll()
+  end
+  function BinarySwitch:turnOn()
+    self:updateProperty(\"value\",true)
+    self:updateProperty(\"state\",true)
+  end
+  function BinarySwitch:turnOff()
+    self:updateProperty(\"value\",false)
+    self:updateProperty(\"state\",false)
+  end
+  function BinarySwitch.annotate() end
+  
+  class 'LuxSensor'(HueClass)
+  LuxSensor.htype = \"com.fibaro.lightSensor\"
+  function LuxSensor:__init(device)
+    HueClass.__init(self,device)
+    self.dev:subscribe(\"light\",function(key,value,b)
+      value = 10 ^ ((value - 1) / 10000)
+      self:print(\"lux %s\",value)
+      self:updateProperty(\"value\",value)
+    end)
+    self.dev:publishAll()
+  end
+  function LuxSensor.annotate() end
+  
+  class 'MotionSensor'(HueClass)
+  MotionSensor.htype = \"com.fibaro.motionSensor\"
+  function MotionSensor:__init(device)
+    HueClass.__init(self,device)
+    self.dev:subscribe(\"motion\",function(key,value,b)
+      self:print(\"motion %s\",value)
+      self:updateProperty(\"value\",value)
+    end)
+    self.dev:publishAll()
+  end
+  function MotionSensor.annotate() end
+  
+  local btnMap = {
+    initial_press=\"Pressed\",
+    ['rep'..'eat']=\"HeldDown\",
+    short_release=\"Released\",
+    long_release=\"Released\"
+  }
+  class 'Button'(HueClass)
+  Button.htype = 'com.fibaro.remoteController'
+  function Button:__init(device)
+    HueClass.__init(self,device)
+    local deviceId,ignore = self.id,false
+    local btnSelf = self
+    local buttons = {}
+    self.dev:subscribe(\"button\",function(key,value,b)
+      local _modifier,key = b:button_state()
+      b._props.button.set(b.rsrc,\"_\")
+      local modifier = btnMap[_modifier] or _modifier
+      local function action(r)
+        btnSelf:print(\"button:%s %s %s\",key,modifier,_modifier)
+        local data = {
+          type =  \"centralSceneEvent\",
+          source = deviceId,
+          data = { keyAttribute = modifier, keyId = key }
+        }
+        if not ignore then api.post(\"/plugins/publishEvent\", data) end
+        btnSelf:updateProperty(\"log\",string.format(\"Key:%s,Attr:%s\",key,modifier))
+        if r and not ignore then
+          btnSelf:print(\"button:%s %s\",key,\"Released\")
+          data.data.keyAttribute = \"Released\"
+          api.post(\"/plugins/publishEvent\", data)
+          btnSelf:updateProperty(\"log\",string.format(\"Key:%s,Attr:%s\",key,\"Released\"))
+        end
+      end
+      if modifier == 'Pressed' then
+        local bd = buttons[key] or {click=0}; buttons[key] = bd
+        if bd.ref then clearTimeout(bd.ref) end
+        bd.click = bd.click + 1
+        bd.ref = setTimeout(function()
+          buttons[key] = nil
+          if bd.click > 1 then modifier = modifier..bd.click end
+          action(true)
+        end,1500)
+      elseif modifier == 'Released' then
+      else action() end
+    end)
+    ignore = true
+    self.dev:publishAll()
+    ignore = false
+  end
+  function Button.annotate(child)
+    child.properties = child.properties or {}
+    child.properties.centralSceneSupport = {
+      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 1 },
+      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 2 },
+      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 3 },
+      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 4 },
+    }
+    child.interfaces = child.interfaces or {}
+    table.insert(child.interfaces,\"zwaveCentralScene\")
+  end
+  
+  class 'DoorSensor'(HueClass)
+  DoorSensor.htype = \"com.fibaro.doorSensor\"
+  function DoorSensor:__init(device)
+    HueClass.__init(self,device)
+    self.dev:subscribe(\"contact_report\",function(key,value,b)
+      value = not(value=='contact')
+      self:print(\"contact %s\",value)
+      self:updateProperty(\"value\",value)
+    end)
+    self.dev:publishAll()
+  end
+  function DoorSensor.annotate() end
+  
+  class 'MultilevelSensor'(HueClass)
+  MultilevelSensor.htype = \"com.fibaro.multilevelSensor\"
+  function MultilevelSensor:__init(device)
+    HueClass.__init(self,device)
+    self.args = argsMap[self._uid].args or {}
+    self.args.div = self.args.div or 1
+    self.value = 0
+    self.dev:subscribe(\"relative_rotary\",function(key,v,b)
+      if not v then return end
+      local steps = math.max(ROUND(v.rotation.steps / self.args.div),1)
+      local dir = (1 - (v.rotation.direction=='clock_wise' and 0 or 2))
+      self.value = self.value + steps*dir
+      if self.value < 0 then self.value = 0 end
+      if self.value > 100 then self.value = 100 end
+      self:print(\"rotary %s\",self.value)
+      self:updateProperty(\"value\",self.value)
+    end)
+    self.dev:publishAll()
+  end
+  function MultilevelSensor.annotate(rsrc)
+  end
+  
+  class 'RoomZoneQA'(HueClass)
+  RoomZoneQA.htype = \"com.fibaro.multilevelSwitch\"
+  function RoomZoneQA:__init(device)
+    HueClass.__init(self,device)
+    self.args = argsMap[self._uid].args or {}
+    self.args.dimdelay = self.args.dimdelay or 8000
+    
+    -- Check room/zone dead status
+    local statuses = {}
+    local devsons = {}
+    for _,c in pairs(self.dev.children or {}) do
+      c = HUE:_resolve(c)
+      if c.type ~= 'device' then
+        c = HUE:_resolve(c.owner)
+      end
+      local props = c:getProps()
+      --if props.status then
+      statuses[c.id] = true
+      c = HUE:getResource(c.id)
+      c:subscribe(\"status\",function(key,value,b)
+        statuses[b.id] = value == 'connected'
+        local stat = true
+        for _,s in pairs(statuses) do stat=stat and s end
+        local oldDead = fibaro.getValue(self.id,'dead')
+        self:updateProperty(\"dead\",not stat)
+        local state = fibaro.getValue(self.id,'state')
+        local value = fibaro.getValue(self.id,'value')
+        if (not stat) ~= oldDead then -- change in dead state
+           if not stat then -- Now dead
+              self.deadStatus = {state,value}
+              self:updateProperty('state',false)
+              self:updateProperty('value',0)
+           else -- Now living
+              if self.deadStatus then
+                self:updateProperty('state',self.deadStatus[1])
+                self:updateProperty('value',self.deadStatus[2])
+              end
+           end
+        end
+        self:print(\"status %s\",stat)
+      end)
+      c:subscribe(\"on\",function(key,value,b)
+        devsons[b.id] = value
+        print(\"c on\",value,b.id)
+        for _,s in pairs(devsons) do
+          --
+        end
+      end)
+      local c0 = c
+      setTimeout(function()
+        c0:publishAll()
+      end,0)
+      --end
+    end
+    
+    self.dev:subscribe(\"on\",function(key,value,b)
+      self:print(\"on %s\",value)
+      local d = ROUND(b._props.dimming.get(b.rsrc))
+      self:updateProperty(\"state\",value)
+      self:updateProperty(\"value\",d)
+    end)
+    
+    self.dev:subscribe(\"dimming\",function(key,value,b)
+      self:print(\"dimming %s\",value)
+      self:updateProperty(\"value\",ROUND(value))
+    end)
+    
+    self.dev:publishAll()
+  end
+  
+  function RoomZoneQA:setScene(event)
+    self:setVariable(\"scene\",event)
+  end
+  function RoomZoneQA:turnOn(sceneArg)
+    self:updateProperty(\"value\", 100)
+    self:updateProperty(\"state\", true)
+    local sceneName = type(sceneArg)=='string' and sceneArg or self:getVar(\"scene\")
+    
+    local scene = HUE:getSceneByName(sceneName,self.dev.name)
+    if sceneName and not scene then self:print(\"Scene %s not found\",sceneName) end
+    if not scene then
+      self.dev:targetCmd({on = {on=true}})
+    else
+      self:print(\"Turn on Scene %s\",scene.name)
+      scene:recall()
+    end
+  end
+  function RoomZoneQA:turnOff()
+    self:print(\"Turn off\")
+    self:updateProperty(\"value\", 0)
+    self:updateProperty(\"state\", false)
+    self.dev:targetCmd({on = {on=false}})
+  end
+  function RoomZoneQA:setValue(value)
+    if type(value)=='table' then value = value.values[1] end
+    value = tonumber(value)
+    self:print(\"setValue\")
+    self:updateProperty(\"value\", value)
+    self.dev:targetCmd({dimming = {brightness=value}})
+  end
+  function RoomZoneQA:startLevelIncrease()
+    self:print(\"startLevelIncrease\")
+    local val = self.properties.value
+    val = ROUND((100-val)/100.0*self.args.dimdelay)
+    --self:print(\"LI %s %s\",self.properties.value,val)
+    self.dev:targetCmd({dimming = {brightness=100}, dynamics ={duration=val}})
+  end
+  function RoomZoneQA:startLevelDecrease()
+    self:print(\"startLevelDecrease\")
+    local val = self.properties.value
+    val = ROUND((val-0)/100.0*self.args.dimdelay)
+    --self:print(\"LD %s %s\",self.properties.value,val)
+    self.dev:targetCmd({dimming = {brightness=0}, dynamics ={duration=val}})
+  end
+  function RoomZoneQA:stopLevelChange()
+    self.dev:targetCmd({dimming_delta = {action='stop'}})
+  end
+  function RoomZoneQA:getVar(name)
+    local qvs = __fibaro_get_device_property(self.id,\"quickAppVariables\").value
+    for _,var in ipairs(qvs or {}) do
+      if var.name==name then return var.value end
+    end
+    return nil
+  end
+  function RoomZoneQA.annotate(rsrc)
+    rsrc.interfaces = rsrc.interfaces or {}
+    table.insert(rsrc.interfaces,\"levelChange\")
+  end
+  
+end
+
+----------- Child class
+do
+  local VERSION = \"0.0.68\"
+  print(\"QwikAppChild library v\"..VERSION)
+  local childID = 'ChildID'
+  local classID = 'ClassName'
+
+  local children = {}
+  local createChild = QuickApp.createChildDevice
+  function QuickApp:initChildDevices() end
+  QuickApp.debugQwikAppChild = true
+
+  class 'QwikAppChild'(QuickAppChild)
+
+  local fmt = string.format
+
+  local function getVar(deviceId,key)
+    local res, stat = api.get(\"/plugins/\" .. deviceId .. \"/variables/\" .. key)
+    if stat ~= 200 then return nil end
+    return res.value
+  end
+
+  local UID = nil
+  function QwikAppChild:__init(device)
+    QuickAppChild.__init(self, device)
+    local uid = UID or self:internalStorageGet(childID) or \"\"
+    self._uid = uid
+    children[uid]=self
+    self._sid = tonumber(uid:match(\"(%d+)$\"))
+  end
+
+  function QuickApp:createChildDevice0(uid,props,interfaces,className)
+    __assert_type(uid,'string')
+    __assert_type(className,'string')
+    props.initialProperties = props.initialProperties or {}
+    props.initialInterfaces = interfaces
+    UID = uid
+    local c = createChild(self,props,_G[className])
+    UID = nil
+    if not c then return end
+    c:internalStorageSet(childID,uid,true)
+    c:internalStorageSet(classID,className,true)
+    return c
+  end
+
+  function QuickApp:loadExistingChildren(chs)
+    __assert_type(chs,'table')
+    local rerr = false
+    local stat,err = pcall(function()
+      self.children = children
+      local cdevs,n = api.get(\"/devices?parentId=\"..self.id) or {},0 -- Pick up all my children
+      for _,child in ipairs(cdevs) do
+        local uid = getVar(child.id,childID)
+        local className = getVar(child.id,classID)
+        local childObject = nil
+        if chs[uid] then
+          if QuickApp.debugQwikAppChild then
+            self:debug(fmt(\"Loading existing child UID:'%s'\",uid))
+          end
+          local stat,err = pcall(function()
+            childObject = _G[className] and _G[className](child) or QuickAppChild(child)
+            self.childDevices[child.id] = childObject
+            childObject.parent = self
+          end)
+          if not stat then
+            self:error(fmt(\"loadExistingChildren:%s child UID:%s\",err,uid))
+            rerr=true
+          end
+        end
+      end
+    end)
+    if not stat then rerr=true self:error(\"loadExistingChildren:\"..err) end
+    return rerr
+  end
+
+  function QuickApp:createMissingChildren(children)
+    local stat,err = pcall(function()
+      local chs,k = {},0
+      for uid,data in pairs(children) do
+        local m = uid:sub(1,1)=='i' and 100 or 0
+        k = k + 1
+        chs[#chs+1]={uid=uid,id=m+tonumber(uid:match(\"(%d+)$\") or k),data=data}
+      end
+      table.sort(chs,function(a,b) return a.id<b.id end)
+      for _,ch in ipairs(chs) do
+        if not self.children[ch.uid] then -- not loaded yet
+          if QuickApp.debugQwikAppChild then
+            self:debug(fmt(\"Creating missing child UID:'%s'\",ch.uid))
+          end
+          local props = {
+            name = ch.data.name,
+            type = ch.data.type,
+            initialProperties = ch.data.properties,
+          }
+          self:createChildDevice0(ch.uid,props,ch.data.interfaces,ch.data.className)
+        end
+      end
+    end)
+    if not stat then self:error(\"createMissingChildren:\"..err) end
+  end
+
+  function QuickApp:removeUndefinedChildren(children)
+    local cdevs = api.get(\"/devices?parentId=\"..self.id)
+    for _,child in ipairs(cdevs) do
+      if not self.childDevices[child.id] then
+        if QuickApp.debugQwikAppChild then
+          self:debug(fmt(\"Deleting undefined child ID:%s\",child.id))
+        end
+        api.delete(\"/plugins/removeChildDevice/\" .. child.id)
+      end
+    end
+  end
+
+  function QuickApp:initChildren(children)
+    if self:loadExistingChildren(children) then return end
+    self:createMissingChildren(children)
+    self:removeUndefinedChildren(children) -- Remove child devices not loaded/created
+  end
+end","isMain":false,"isOpen":false},{"type":"lua","name":"Engine","content":"--[[
 GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
 
@@ -1178,618 +1710,86 @@ function HUEv2Engine:init(ip,key,cb)
   main() 
   _initEngine(ip,key,cb)
 end
-","isMain":false,"isOpen":false},{"type":"lua","name":"App","content":"---@diagnostic disable: undefined-global
-------- QAs/HueV2App.lua ----------
+","isMain":false,"isOpen":false},{"type":"lua","name":"main","content":"--%%name:Yahue
+--%%type:com.fibaro.deviceController
+--%%uid:UPD896846032517896
+--%%save:YahueV2.fqa
+--%%var:Hue_IP=config.Hue_ip
+--%%var:Hue_User=config.Hue_user
+--%%merge:HueV2Engine.lua,HueV2App.lua=HueV2File.lua
+--%%file:HueV2Engine.lua,Engine
+--%%file:HueV2App.lua,App
+--%%file:HueV2Map.lua,Map
+--%% file:$fibaro.lib.betterqa,BetterQA
+-- %%file:HueV2File.lua,HueV2
+--%%u:{label='info', text=''}
+--%%u:{button='restart', text='Restart', onReleased='restart'}
+--%%u:{button='dump', text='Dump resources', onReleased='dumpResources'}
+--%%desktop:true
+
 fibaro.debugFlags = fibaro.debugFlags or {}
-local HUE
+local HUE,update
 
-^local VERSION = \"0.0.62\"
-local serial = \"UPD896661234567893\"
-HUEv2Engine = HUEv2Engine or {}
-local HUE = HUEv2Engine
-HUE.appName = \"YahueV2\"
-HUE.appVersion = tostring(_version)
+local function init()
+  local self = quickApp
+  self:debug(HUE.appName,HUE.appVersion)
+  self:updateView(\"info\",\"text\",HUE.appName..\" v\"..HUE.appVersion)
 
-local function ROUND(i) return math.floor(i+0.5) end
-local function printf(fmt,...) print(string.format(fmt,...)) end
-local function keys(t) local r = {} for k,v in pairs(t) do r[#r+1]=k end return r end
-local function values(t) local r = {} for k,v in pairs(t) do r[#r+1]=v end return r end
-local argsMap = {}
-local function getVar(id,key)
-  local res, stat = api.get(\"/plugins/\" .. id .. \"/variables/\" .. key)
-  if stat ~= 200 then return nil end
-  return res.value
+  fibaro.debugFlags.info=true
+  --fibaro.debugFlags.class=true
+  fibaro.debugFlags.event=true
+  fibaro.debugFlags.call=true
+  local ip,key = self:getVariable(\"Hue_IP\"),self:getVariable(\"Hue_User\")
+  ip = ip:match(\"(%d+.%d+.%d+.%d+)\")
+  key = key:match(\"(.+)\")
+  assert(ip,\"Missing Hue_IP - hub IP address\")
+  assert(key,\"Missing Hue_User - Hue hub key\")
+
+  HUE:init(ip,key,function()
+    --HUEv2Engine:dumpDevices()
+    --HUE:dumpDeviceTable()
+    --HUE:listAllDevicesGrouped()
+    HUE:app()
+    end)
 end
 
-local devProps = {
-  temperature = \"TemperatureSensor\",
-  relative_rotary = \"MultilevelSensor\",
-  button = \"Button\",
-  light = \"LuxSensor\",
-  contact_report = \"DoorSensor\",
-  motion = \"MotionSensor\",
-  [function(p) return p.on and not (p.color or p.dimming) and \"plug\" end] = \"BinarySwitch\",
-}
-
-local defClasses
-
-function HUEv2Engine:app()
-  defClasses()
-  local childDevices = {}
-  for _,c in ipairs(api.get(\"/devices?parentId=\"..quickApp.id) or {}) do
-    local uid = getVar(c.id,\"ChildID\")
-    if uid then childDevices[uid]=true end
-  end
-  --print(json.encode(childDevices))
-  local ddevices = {}
-  for id,dev in pairs(HUE:getResourceType('device')) do
-    dev = HUE:getResource(id)
-    local props,ok = dev:getProps()
-    for p,cls in pairs(devProps) do
-      if type(p) == 'function' then ok = p(props)
-      else ok = props[p] and p end
-      if ok then
-        print(ok,\"->\",dev.name)
-        local tag = cls..\":\"..id
-        ddevices[tag] = {
-          name = dev.name,
-          id = id,
-          class = cls,
-          enabled = childDevices[tag] or false,
-          args = {}
-        }
-      end
-    end
-  end
-  for id,zr in pairs(HUE:getResourceType('zone')) do
-    local tag = \"RoomZoneQA:\"..id
-    ddevices[tag] = {
-      name = zr.name or tag,
-      id = id,
-      class = \"RoomZoneQA\",
-      enabled = childDevices[tag] or false,
-      args = {}
-    }
-  end
-  for id,zr in pairs(HUE:getResourceType('room')) do
-    local tag = \"RoomZoneQA:\"..id
-    ddevices[tag] = {
-      name = zr.name or tag,
-      id = id,
-      class = \"RoomZoneQA\",
-      enabled = childDevices[tag] or false,
-      args = {}
-    }
-  end
-  
-  local hdevs = {}
-  for _,d in ipairs(HUEDevices) do
-    hdevs[d.class..\":\"..d.id] = d
-  end
-  
-  local regenerate = false
-  for id,_ in pairs(hdevs) do
-    if (not hdevs[id].name) or (not ddevices[id]) then hdevs[id] = nil regenerate=true end
-  end
-  for id,dev in pairs(ddevices) do
-    if not hdevs[id] then hdevs[id] = dev regenerate=true end
-  end
-  
-  local function encodeArgs(t)
-    if type(t)~='table' then return \"{}\" end
-    local p = fibaro.printBuffer()
-    for k,v in pairs(t) do
-      p:printf(\"%s='%s',\",k,tostring(v))
-    end
-    return \"{\"..p:tostring()..\"}\"
-  end
-  
-  if regenerate then
-    print(\"Regenerating map file\")
-    local b = fibaro.printBuffer()
-    local hhdevs = values(hdevs)
-    table.sort(hhdevs,function(a,b) return a.id < b.id end)
-    b:printf(\"\\nHUEDevices = {\\n\")
-    local i = \"\"
-    for _,dev in pairs(hhdevs) do
-      local d = HUE:getResource(dev.id)
-      if d.id ~= i then
-        b:printf(\"-- '%s', %s\\n\",d.name,d.resourceName or \"<N/A\")
-        i = d.id
-      end
-      b:printf(\" {id='%s', name='%s', class='%s', enabled=%s, args=%s},\\n\",dev.id,dev.name,dev.class,dev.enabled,encodeArgs(dev.args))
-    end
-    
-    b:printf(\"}\\n\")
-    print(b:tostring())
-    
-    if fibaro.fibemu then
-      local data = b:tostring()
-      local f = io.open(\"QAs/HueV2Map.lua\",\"w\")
-      if f then
-        f:write(data)
-        f:close()
-      end
-      data = \"return function() \"..data..\" return HUEDevices end\"
-      HUEDevices = load(data)()()
-    else
-      if not api.put(\"/quickApp/\"..quickApp.id..\"/files/Map\",{
-        name=\"Map\", isMain=false, isOpem=false, content=b:tostring()
-      }) then
-        api.post(\"/quickApp/\"..quickApp.id..\"/files\",{
-          name=\"Map\", isMain=false, isOpem=false, content=b:tostring()
-        })
-      end
-    end
-    hdevs = {}
-    for _,d in ipairs(HUEDevices) do
-      hdevs[d.class..\":\"..d.id] = d
-    end
-  end
-  
-  local children = {}
-  for id,data in pairs(hdevs) do
-    argsMap[id]=data
-    if data.enabled then
-      local dev = HUE:getResource(data.id)
-      children[id] = {
-        name = dev.name,
-        type = data.type or _G[data.class].htype,
-        className = data.class,
-        interfaces = dev:getProps()['power_state'] and {'battery'} or nil,
-      }
-      if true then
-        _G[data.class].annotate(children[id])
-      end
-    end
-  end
-  
-  quickApp:initChildren(children)
+function QuickApp:onInit()
+  quickApp = self
+  HUE = HUEv2Engine
+  function self.initChildDevices() end
+  local updated = self:getVariable(\"update\")
+  if updated==\"yes\" then
+    self:debug(\"Updating HueV2App\")
+    self:setVariable(\"update\",\"_\")
+    update()
+  elseif HUE then init() 
+  else self:error(\"Missing HUE library, set QV update=yes\") end
 end
 
-function defClasses()
-  print(\"Defining QA classes\")
-  
-  class 'HueClass'(QwikAppChild)
-  function HueClass:__init(dev)
-    QwikAppChild.__init(self,dev)
-    self.uid = self._uid:match(\".-:(.*)\")
-    self.dev = HUE:getResource(self.uid)
-    self.pname = \"CHILD\"..self.id
-    local props = self.dev:getProps()
-    self.dev:subscribe(\"status\",function(key,value,b)
-      self:print(\"status %s\",value)
-      if value ~= 'connected' then
-        self:updateProperty(\"dead\",true)
-      end
-      self:updateProperty(\"dead\",value~='connected')
-    end)
-    self.dev:subscribe(\"power_state\",function(key,value,b)
-      self:print(\"battery %s\",value.battery_level)
-      self:updateProperty(\"batteryLevel\",value.battery_level)
-    end)
-    if self.properties.userDescription == nil or self.properties.userDescription == \"\" then
-      local fmt = string.format
-      local d = fmt(\"%s\\n%s\",self.dev.type,self.dev.id)
-      print(d)
-      if self.dev.product_data then
-        local pd = self.dev.product_data
-        d = d..fmt(\"\\n%s\\n%s\",pd.product_name or \"\",pd.model_id or \"\")
-      end
-      self:updateProperty(\"userDescription\",d)
-    end
-  end
-  function HueClass:hueCommand(tab)
-  end
-  function HueClass:print(fmt,...)
-    local TAG = __TAG; __TAG = self.pname
-    self:debug(string.format(fmt,...))
-    __TAG = TAG
-  end
-  
-  class 'TemperatureSensor'(HueClass)
-  TemperatureSensor.htype = \"com.fibaro.temperatureSensor\"
-  function TemperatureSensor:__init(device)
-    HueClass.__init(self,device)
-    self.dev:subscribe(\"temperature\",function(key,value,b)
-      self:print(\"temperature %s\",value)
-      self:updateProperty(\"value\",value)
-    end)
-    self.dev:publishAll()
-  end
-  function TemperatureSensor.annotate() end
-  
-  class 'BinarySwitch'(HueClass)
-  BinarySwitch.htype = \"com.fibaro.binarySwitch\"
-  function BinarySwitch:__init(device)
-    HueClass.__init(self,device)
-    self.dev:subscribe(\"on\",function(key,value,b)
-      self:print(\"on %s\",value)
-      self:updateProperty(\"value\",value)
-    end)
-    self.dev:publishAll()
-  end
-  function BinarySwitch:turnOn()
-    self:updateProperty(\"value\",true)
-    self:updateProperty(\"state\",true)
-  end
-  function BinarySwitch:turnOff()
-    self:updateProperty(\"value\",false)
-    self:updateProperty(\"state\",false)
-  end
-  function BinarySwitch.annotate() end
-  
-  class 'LuxSensor'(HueClass)
-  LuxSensor.htype = \"com.fibaro.lightSensor\"
-  function LuxSensor:__init(device)
-    HueClass.__init(self,device)
-    self.dev:subscribe(\"light\",function(key,value,b)
-      value = 10 ^ ((value - 1) / 10000)
-      self:print(\"lux %s\",value)
-      self:updateProperty(\"value\",value)
-    end)
-    self.dev:publishAll()
-  end
-  function LuxSensor.annotate() end
-  
-  class 'MotionSensor'(HueClass)
-  MotionSensor.htype = \"com.fibaro.motionSensor\"
-  function MotionSensor:__init(device)
-    HueClass.__init(self,device)
-    self.dev:subscribe(\"motion\",function(key,value,b)
-      self:print(\"motion %s\",value)
-      self:updateProperty(\"value\",value)
-    end)
-    self.dev:publishAll()
-  end
-  function MotionSensor.annotate() end
-  
-  local btnMap = {
-    initial_press=\"Pressed\",
-    ['rep'..'eat']=\"HeldDown\",
-    short_release=\"Released\",
-    long_release=\"Released\"
-  }
-  class 'Button'(HueClass)
-  Button.htype = 'com.fibaro.remoteController'
-  function Button:__init(device)
-    HueClass.__init(self,device)
-    local deviceId,ignore = self.id,false
-    local btnSelf = self
-    local buttons = {}
-    self.dev:subscribe(\"button\",function(key,value,b)
-      local _modifier,key = b:button_state()
-      b._props.button.set(b.rsrc,\"_\")
-      local modifier = btnMap[_modifier] or _modifier
-      local function action(r)
-        btnSelf:print(\"button:%s %s %s\",key,modifier,_modifier)
-        local data = {
-          type =  \"centralSceneEvent\",
-          source = deviceId,
-          data = { keyAttribute = modifier, keyId = key }
-        }
-        if not ignore then api.post(\"/plugins/publishEvent\", data) end
-        btnSelf:updateProperty(\"log\",string.format(\"Key:%s,Attr:%s\",key,modifier))
-        if r and not ignore then
-          btnSelf:print(\"button:%s %s\",key,\"Released\")
-          data.data.keyAttribute = \"Released\"
-          api.post(\"/plugins/publishEvent\", data)
-          btnSelf:updateProperty(\"log\",string.format(\"Key:%s,Attr:%s\",key,\"Released\"))
-        end
-      end
-      if modifier == 'Pressed' then
-        local bd = buttons[key] or {click=0}; buttons[key] = bd
-        if bd.ref then clearTimeout(bd.ref) end
-        bd.click = bd.click + 1
-        bd.ref = setTimeout(function()
-          buttons[key] = nil
-          if bd.click > 1 then modifier = modifier..bd.click end
-          action(true)
-        end,1500)
-      elseif modifier == 'Released' then
-      else action() end
-    end)
-    ignore = true
-    self.dev:publishAll()
-    ignore = false
-  end
-  function Button.annotate(child)
-    child.properties = child.properties or {}
-    child.properties.centralSceneSupport = {
-      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 1 },
-      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 2 },
-      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 3 },
-      { keyAttributes = {\"Pressed\",\"Released\",\"HeldDown\",\"Pressed2\",\"Pressed3\"},keyId = 4 },
-    }
-    child.interfaces = child.interfaces or {}
-    table.insert(child.interfaces,\"zwaveCentralScene\")
-  end
-  
-  class 'DoorSensor'(HueClass)
-  DoorSensor.htype = \"com.fibaro.doorSensor\"
-  function DoorSensor:__init(device)
-    HueClass.__init(self,device)
-    self.dev:subscribe(\"contact_report\",function(key,value,b)
-      value = not(value=='contact')
-      self:print(\"contact %s\",value)
-      self:updateProperty(\"value\",value)
-    end)
-    self.dev:publishAll()
-  end
-  function DoorSensor.annotate() end
-  
-  class 'MultilevelSensor'(HueClass)
-  MultilevelSensor.htype = \"com.fibaro.multilevelSensor\"
-  function MultilevelSensor:__init(device)
-    HueClass.__init(self,device)
-    self.args = argsMap[self._uid].args or {}
-    self.args.div = self.args.div or 1
-    self.value = 0
-    self.dev:subscribe(\"relative_rotary\",function(key,v,b)
-      if not v then return end
-      local steps = math.max(ROUND(v.rotation.steps / self.args.div),1)
-      local dir = (1 - (v.rotation.direction=='clock_wise' and 0 or 2))
-      self.value = self.value + steps*dir
-      if self.value < 0 then self.value = 0 end
-      if self.value > 100 then self.value = 100 end
-      self:print(\"rotary %s\",self.value)
-      self:updateProperty(\"value\",self.value)
-    end)
-    self.dev:publishAll()
-  end
-  function MultilevelSensor.annotate(rsrc)
-  end
-  
-  class 'RoomZoneQA'(HueClass)
-  RoomZoneQA.htype = \"com.fibaro.multilevelSwitch\"
-  function RoomZoneQA:__init(device)
-    HueClass.__init(self,device)
-    self.args = argsMap[self._uid].args or {}
-    self.args.dimdelay = self.args.dimdelay or 8000
-    
-    -- Check room/zone dead status
-    local statuses = {}
-    local devsons = {}
-    for _,c in pairs(self.dev.children or {}) do
-      c = HUE:_resolve(c)
-      if c.type ~= 'device' then
-        c = HUE:_resolve(c.owner)
-      end
-      local props = c:getProps()
-      --if props.status then
-      statuses[c.id] = true
-      c = HUE:getResource(c.id)
-      c:subscribe(\"status\",function(key,value,b)
-        statuses[b.id] = value == 'connected'
-        local stat = true
-        for _,s in pairs(statuses) do stat=stat and s end
-        local oldDead = fibaro.getValue(self.id,'dead')
-        self:updateProperty(\"dead\",not stat)
-        local state = fibaro.getValue(self.id,'state')
-        local value = fibaro.getValue(self.id,'value')
-        if (not stat) ~= oldDead then -- change in dead state
-           if not stat then -- Now dead
-              self.deadStatus = {state,value}
-              self:updateProperty('state',false)
-              self:updateProperty('value',0)
-           else -- Now living
-              if self.deadStatus then
-                self:updateProperty('state',self.deadStatus[1])
-                self:updateProperty('value',self.deadStatus[2])
-              end
-           end
-        end
-        self:print(\"status %s\",stat)
-      end)
-      c:subscribe(\"on\",function(key,value,b)
-        devsons[b.id] = value
-        print(\"c on\",value,b.id)
-        for _,s in pairs(devsons) do
-          --
-        end
-      end)
-      local c0 = c
-      setTimeout(function()
-        c0:publishAll()
-      end,0)
-      --end
-    end
-    
-    self.dev:subscribe(\"on\",function(key,value,b)
-      self:print(\"on %s\",value)
-      local d = ROUND(b._props.dimming.get(b.rsrc))
-      self:updateProperty(\"state\",value)
-      self:updateProperty(\"value\",d)
-    end)
-    
-    self.dev:subscribe(\"dimming\",function(key,value,b)
-      self:print(\"dimming %s\",value)
-      self:updateProperty(\"value\",ROUND(value))
-    end)
-    
-    self.dev:publishAll()
-  end
-  
-  function RoomZoneQA:setScene(event)
-    self:setVariable(\"scene\",event)
-  end
-  function RoomZoneQA:turnOn(sceneArg)
-    self:updateProperty(\"value\", 100)
-    self:updateProperty(\"state\", true)
-    local sceneName = type(sceneArg)=='string' and sceneArg or self:getVar(\"scene\")
-    
-    local scene = HUE:getSceneByName(sceneName,self.dev.name)
-    if sceneName and not scene then self:print(\"Scene %s not found\",sceneName) end
-    if not scene then
-      self.dev:targetCmd({on = {on=true}})
-    else
-      self:print(\"Turn on Scene %s\",scene.name)
-      scene:recall()
-    end
-  end
-  function RoomZoneQA:turnOff()
-    self:print(\"Turn off\")
-    self:updateProperty(\"value\", 0)
-    self:updateProperty(\"state\", false)
-    self.dev:targetCmd({on = {on=false}})
-  end
-  function RoomZoneQA:setValue(value)
-    if type(value)=='table' then value = value.values[1] end
-    value = tonumber(value)
-    self:print(\"setValue\")
-    self:updateProperty(\"value\", value)
-    self.dev:targetCmd({dimming = {brightness=value}})
-  end
-  function RoomZoneQA:startLevelIncrease()
-    self:print(\"startLevelIncrease\")
-    local val = self.properties.value
-    val = ROUND((100-val)/100.0*self.args.dimdelay)
-    --self:print(\"LI %s %s\",self.properties.value,val)
-    self.dev:targetCmd({dimming = {brightness=100}, dynamics ={duration=val}})
-  end
-  function RoomZoneQA:startLevelDecrease()
-    self:print(\"startLevelDecrease\")
-    local val = self.properties.value
-    val = ROUND((val-0)/100.0*self.args.dimdelay)
-    --self:print(\"LD %s %s\",self.properties.value,val)
-    self.dev:targetCmd({dimming = {brightness=0}, dynamics ={duration=val}})
-  end
-  function RoomZoneQA:stopLevelChange()
-    self.dev:targetCmd({dimming_delta = {action='stop'}})
-  end
-  function RoomZoneQA:getVar(name)
-    local qvs = __fibaro_get_device_property(self.id,\"quickAppVariables\").value
-    for _,var in ipairs(qvs or {}) do
-      if var.name==name then return var.value end
-    end
-    return nil
-  end
-  function RoomZoneQA.annotate(rsrc)
-    rsrc.interfaces = rsrc.interfaces or {}
-    table.insert(rsrc.interfaces,\"levelChange\")
-  end
-  
+function QuickApp:restart() plugin.restart() end
+function QuickApp:dumpResources() 
+  if HUE then HUE:listAllDevicesGrouped() end
 end
 
------------ Child class
-do
-  local VERSION = \"1.0\"
-  print(\"QwikAppChild library v\"..VERSION)
-  local childID = 'ChildID'
-  local classID = 'ClassName'
-
-  local children = {}
-  local createChild = QuickApp.createChildDevice
-  function QuickApp:initChildDevices() end
-  QuickApp.debugQwikAppChild = true
-
-  class 'QwikAppChild'(QuickAppChild)
-
-  local fmt = string.format
-
-  local function getVar(deviceId,key)
-    local res, stat = api.get(\"/plugins/\" .. deviceId .. \"/variables/\" .. key)
-    if stat ~= 200 then return nil end
-    return res.value
+function update()
+  local baseURL = \"https://raw.githubusercontent.com/jangabrielsson/Yahue/master/\"
+  local file1 = baseURL..\"HueV2File.lua\"
+  local function getFile(url,cont)
+    quickApp:debug(\"Fetching \"..url)
+    net.HTTPClient():request(url,{
+      options = { method = 'GET', checkCertificate=false, timeout=20000},
+      success = function(resp) cont(resp.data) end,
+      error = function(err) fibaro.error(__TAG,\"Fetching \"..err) end
+    })
   end
-
-  local UID = nil
-  function QwikAppChild:__init(device)
-    QuickAppChild.__init(self, device)
-    local uid = UID or self:internalStorageGet(childID) or \"\"
-    self._uid = uid
-    children[uid]=self
-    self._sid = tonumber(uid:match(\"(%d+)$\"))
-  end
-
-  function QuickApp:createChildDevice0(uid,props,interfaces,className)
-    __assert_type(uid,'string')
-    __assert_type(className,'string')
-    props.initialProperties = props.initialProperties or {}
-    props.initialInterfaces = interfaces
-    UID = uid
-    local c = createChild(self,props,_G[className])
-    UID = nil
-    if not c then return end
-    c:internalStorageSet(childID,uid,true)
-    c:internalStorageSet(classID,className,true)
-    return c
-  end
-
-  function QuickApp:loadExistingChildren(chs)
-    __assert_type(chs,'table')
-    local rerr = false
-    local stat,err = pcall(function()
-      self.children = children
-      local cdevs,n = api.get(\"/devices?parentId=\"..self.id) or {},0 -- Pick up all my children
-      for _,child in ipairs(cdevs) do
-        local uid = getVar(child.id,childID)
-        local className = getVar(child.id,classID)
-        local childObject = nil
-        if chs[uid] then
-          if QuickApp.debugQwikAppChild then
-            self:debug(fmt(\"Loading existing child UID:'%s'\",uid))
-          end
-          local stat,err = pcall(function()
-            childObject = _G[className] and _G[className](child) or QuickAppChild(child)
-            self.childDevices[child.id] = childObject
-            childObject.parent = self
-          end)
-          if not stat then
-            self:error(fmt(\"loadExistingChildren:%s child UID:%s\",err,uid))
-            rerr=true
-          end
-        end
-      end
-    end)
-    if not stat then rerr=true self:error(\"loadExistingChildren:\"..err) end
-    return rerr
-  end
-
-  function QuickApp:createMissingChildren(children)
-    local stat,err = pcall(function()
-      local chs,k = {},0
-      for uid,data in pairs(children) do
-        local m = uid:sub(1,1)=='i' and 100 or 0
-        k = k + 1
-        chs[#chs+1]={uid=uid,id=m+tonumber(uid:match(\"(%d+)$\") or k),data=data}
-      end
-      table.sort(chs,function(a,b) return a.id<b.id end)
-      for _,ch in ipairs(chs) do
-        if not self.children[ch.uid] then -- not loaded yet
-          if QuickApp.debugQwikAppChild then
-            self:debug(fmt(\"Creating missing child UID:'%s'\",ch.uid))
-          end
-          local props = {
-            name = ch.data.name,
-            type = ch.data.type,
-            initialProperties = ch.data.properties,
-          }
-          self:createChildDevice0(ch.uid,props,ch.data.interfaces,ch.data.className)
-        end
-      end
-    end)
-    if not stat then self:error(\"createMissingChildren:\"..err) end
-  end
-
-  function QuickApp:removeUndefinedChildren(children)
-    local cdevs = api.get(\"/devices?parentId=\"..self.id)
-    for _,child in ipairs(cdevs) do
-      if not self.childDevices[child.id] then
-        if QuickApp.debugQwikAppChild then
-          self:debug(fmt(\"Deleting undefined child ID:%s\",child.id))
-        end
-        api.delete(\"/plugins/removeChildDevice/\" .. child.id)
-      end
-    end
-  end
-
-  function QuickApp:initChildren(children)
-    if self:loadExistingChildren(children) then return end
-    self:createMissingChildren(children)
-    self:removeUndefinedChildren(children) -- Remove child devices not loaded/created
-  end
-end","isMain":false,"isOpen":false},{"type":"lua","name":"Map","content":"
+  getFile(file1,function(data1)
+    quickApp:setVariable(\"update\",os.date(\"%Y-%m-%d %H:%M:%S\"))
+    local stat,err = api.put(\"/quickApp/\"..quickApp.id..\"/files\",{
+      {name=\"HueV2\", isMain=false, isOpen=false, content=data1},
+    })
+    setTimeout(init,0)
+  end)
+end","isMain":true,"isOpen":false},{"type":"lua","name":"Map","content":"
 HUEDevices = {
 -- 'Stars', Zone
  {id='39e1fc25-e926-42e5-a840-b2d21aaa08f3', name='Stars', class='RoomZoneQA', enabled=false, args={}},

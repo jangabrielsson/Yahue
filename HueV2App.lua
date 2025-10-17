@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.0.67"
+local VERSION = "0.0.68"
 local serial = "UPD896661234567893"
 HUEv2Engine = HUEv2Engine or {}
 local HUE = HUEv2Engine
@@ -493,7 +493,7 @@ end
 
 ----------- Child class
 do
-  local VERSION = "0.0.67"
+  local VERSION = "0.0.68"
   print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
   local classID = 'ClassName'
