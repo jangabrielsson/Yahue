@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Yahue v0.0.62 - Forum Post</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: white;
+            color: #333;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .post-content {
+            background: #fafafa;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .copy-button {
+            background: #0366d6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .copy-button:hover {
+            background: #0256cc;
+        }
+        .forum-link {
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .forum-link:hover {
+            background: #218838;
+        }
+        h2 { color: #0366d6; }
+        h3 { color: #586069; }
+        code { background: #f6f8fa; padding: 2px 4px; border-radius: 3px; }
+        .emoji { font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <h1>Yahue v0.0.62 - Forum Post Helper</h1>
+    
+    <div>
+        <button class="copy-button" onclick="copyToClipboard()">📋 Copy Forum Post</button>
+        <a href="https://forum.fibaro.com/topic/76207-yahuev2-yet-another-hue-app-using-hue-api-v2/#comment-282679" class="forum-link" target="_blank">🌐 Open Forum Thread</a>
+    </div>
+    
+    <div class="post-content" id="forumPost">
+<h2>🚀 Yahue - Release v0.0.62</h2>
+
+<h3>Changes in v0.0.62</h3>
+<ul>
+<li>✨ <strong>Feature</strong>: Implement feature X to enhance user experience and fix bug Y in module Z</li>
+<li>📚 <strong>Docs</strong>: enhance commit message guidelines to prevent generic messages</li>
+</ul>
+  - Add specific examples and anti-patterns to .gitmessage template
+  - Include project-specific commit examples in .vscode/commit-examples.md
+  - Enable Copilot SCM integration and verbose commit mode
+  - Update CONTRIBUTING.md with clear do's and don'ts
+  - Helps prevent generic 'Implement feature X' type messages
+<ul>
+<li>✨ <strong>Feature</strong>: Add forum post generator and project configuration scripts</li>
+</ul>
+  - Implemented a forum post generator script (forum-post-generator.sh) to create HTML posts for project releases.
+  - Added project configuration script (project-config.sh) to manage project-specific settings, including version management and artifact generation.
+  - Created a project configuration template (project-config.sh.example) for easy setup of new projects.
+  - Introduced a version setting script (setversion.sh) to update version numbers across multiple files.
+  - Enhanced documentation and comments throughout the scripts for better clarity and usability.
+<ul>
+<li>📚 <strong>Docs</strong>: add commit message conventions and templates</li>
+</ul>
+  - Add .gitmessage template for consistent commit formatting
+  - Add CONTRIBUTING.md with conventional commit guidelines
+  - Configure VS Code settings for git input validation
+  - Aligns with existing release note generation from commits
+<ul>
+<li>✨ <strong>Feature</strong>: Remove .env from git tracking</li>
+<li>✨ <strong>Feature</strong>: Implement code changes to enhance functionality and improve performance</li>
+<li>✨ <strong>Feature</strong>: Implement code changes to enhance functionality and improve performance</li>
+<li>✨ <strong>Feature</strong>: Fix formatting and improve variable handling in HueV2 QuickApp</li>
+<li>✨ <strong>Feature</strong>: Implement code changes to enhance functionality and improve performance</li>
+<li>✨ <strong>Feature</strong>: Refactor code structure for improved readability and maintainability</li>
+<li>✨ <strong>Feature</strong>: Add Yahue release information and update HueV2 QuickApp metadata</li>
+<li>✨ <strong>Feature</strong>: Add HueV2 QuickApp and device mapping for enhanced integration</li>
+</ul>
+<p><em>Generated automatically from git commits</em></p>
+
+<h3>📥 <strong>Download</strong></h3>
+<ul>
+<li><strong>GitHub Releases</strong>: <a href="https://github.com/jangabrielsson/Yahue/releases/tag/v0.0.62">https://github.com/jangabrielsson/Yahue/releases/tag/v0.0.62</a></li>
+<li><strong>Direct Downloads</strong>:
+<ul>
+<li><a href="https://github.com/jangabrielsson/Yahue/releases/download/v0.0.62/Yahue.fqa">Yahue.fqa</a></li>
+</ul>
+</li>
+</ul>
+
+<h3>📚 <strong>Documentation</strong></h3>
+<ul>
+<li><strong>Full Documentation</strong>: <a href="https://github.com/jangabrielsson/Yahue/blob/main/README.md">https://github.com/jangabrielsson/Yahue/blob/main/README.md</a></li>
+</ul>
+
+<hr>
+<p><em>This release was automatically generated from commit 4b408c5</em></p>
+    </div>
+
+    <script>
+        function copyToClipboard() {
+            const postContent = document.getElementById('forumPost');
+            const range = document.createRange();
+            range.selectNode(postContent);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            
+            try {
+                document.execCommand('copy');
+                const button = document.querySelector('.copy-button');
+                const originalText = button.textContent;
+                button.textContent = '✅ Copied!';
+                button.style.background = '#28a745';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '#0366d6';
+                }, 2000);
+            } catch (err) {
+                alert('Please manually select and copy the content below');
+            }
+            
+            window.getSelection().removeAllRanges();
+        }
+    </script>
+</body>
+</html>
