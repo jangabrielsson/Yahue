@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local version = 0.47
+local version = 0.48
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -69,6 +69,30 @@ local function copy(t)
   local r = {} 
   for k,v in pairs(t) do if type(v)=='table' then r[k]=copy(v) else r[k]=v end end 
   return r
+end
+
+local PGETCACHE = {}
+local function PGET(path,tab,dflt)
+    local ps = PGETCACHE[path] or string.split(path,".")
+    PGETCACHE[path] = ps
+    for _,p in ipairs(ps) do
+        tab = tab[p]
+        if tab == nil then return dflt end
+    end
+    return tab
+end
+
+local function PSET(path,tab,val)
+    if tab == nil then tab = {} end
+    local ps,t,p = PGETCACHE[path] or string.split(path,"."),tab
+    PGETCACHE[path] = ps
+    for i=1,#ps-1 do
+        p = ps[i]
+        if t[p] == nil then t[p] = {} end
+        t = t[p]
+    end
+    t[ps[#ps]] = val
+    return tab
 end
 
 local function keyMerge(t1,t2)
@@ -570,8 +594,8 @@ local function main()
   
   props.relative_rotary = {
     relative_rotary = {
-      get=function(r) if r.relative_rotary then return r.relative_rotary.last_event end end,
-      set=function(r,v) if not r.relative_rotary then r.relative_rotary = { last_event = v } else r.relative_rotary.last_event=v end end,
+      get=function(r) return PGET('relative_rotary.last_event',r) end,
+      set=function(r,v) PSET('relative_rotary.last_event',r,v) end,
       changed=function(o,n)
         local ob,nb = o.relative_rotary or {},n.relative_rotary or {}
         return true,nb.last_event
@@ -583,7 +607,7 @@ local function main()
     hueResource.__init(self,id)
   end
   function relative_rotary:relative_rotary_state()
-    local le = self.rsrc.relative_rotary and self.rsrc.relative_rotary.last_event
+    local le = PGET('relative_rotary.last_event',self.rsrc)
     if le then 
       return le.rotation.steps,le.rotation.direction 
     else return "N/A","N/A" end
@@ -594,9 +618,9 @@ local function main()
   
   props.temperature = {
     temperature={
-      get=function(r) return r.temperature.temperature_report.temperature end,
-      set=function(r,v) r.temperature.temperature_report.temperature=v end,
-      changed=function(o,n) return o.temperature.temperature_report.temperature~=n.temperature.temperature_report.temperature,n.temperature.temperature_report.temperature end,
+      get=function(r) return PGET('temperature.temperature_report.temperature',r) end,
+      set=function(r,v) PSET('temperature.temperature_report.temperature',r,v) end,
+      changed=function(o,n) local ov,nv = PGET('temperature.temperature_report.temperature',o), PGET('temperature.temperature_report.temperature',nv) return nv~=ov,nv end,
     },
   }
   
@@ -608,14 +632,14 @@ local function main()
     return self.rsrc.temperature.temperature_report.temperature
   end
   function temperature:__tostring()
-    return fmt("[temperature:%s,%s,value:%s]",self.id,self:getName(),self:temperature())
+    return fmt("[temperature:%s,%s,value:%s]",self.id,self:getName(),self:temperature() or "N/A")
   end
   
   props.motion = {
     motion={
-      get=function(r) return r.motion.motion_report.motion end,
-      set=function(r,v) r.motion.motion_report.motion=v end,
-      changed=function(o,n) return o.motion.motion_report.motion~=n.motion.motion_report.motion,n.motion.motion_report.motion end
+      get=function(r) return PGET('motion.motion_report.motion',r) end,
+      set=function(r,v) PSET('motion.motion_report.motion',r,v) end,
+      changed=function(o,n) local ov,nv = PGET('motion.motion_report.motion',o), PGET('motion.motion_report.motion',nv) return nv~=ov,nv end
     },
   }
   local motion = classs('motion',hueResource)
@@ -626,14 +650,14 @@ local function main()
     return self.rsrc.motion.motion
   end
   function motion:__tostring()
-    return fmt("[motion:%s,%s,value:%s]",self.id,self:getName(),self:motion())
+    return fmt("[motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
   end
   
   props.camera_motion = {
     motion={
-      get=function(r) return (r.motion.motion_report or {}).motion or false end,
-      set=function(r,v) r.motion.motion_report.motion=v end,
-      changed=function(o,n) return o.motion.motion_report.motion~=n.motion.motion_report.motion,n.motion.motion_report.motion end
+      get=function(r) return PGET('motion.motion_report.motion',r,false) end,
+      set=function(r,v) PSET('motion.motion_report.motion',r,v) end,
+      changed=function(o,n) local ov,nv = PGET('motion.motion_report.motion',o), PGET('motion.motion_report.motion',nv) return nv~=ov,nv end
     },
   }
   local camera_motion = classs('camera_motion',hueResource)
@@ -641,17 +665,17 @@ local function main()
     hueResource.__init(self,id)
   end
   function camera_motion:motion()
-    return (self.rsrc.motion.motion_report or {}).motion or false
+    return PGET('motion.motion_report.motion',self.rsrc,false)
   end
   function camera_motion:__tostring()
-    return fmt("[camera_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion())
+    return fmt("[camera_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
   end
   
   props.light_level = {
     light={
-      get=function(r) return (r.light.light_level_report or {}).light_level or 0 end,
-      set=function(r,v) r.light.light_level_report.light_level=v end,
-      changed=function(o,n) return o.light.light_level_report.light_level~=n.light.light_level_report.light_level,n.light.light_level_report.light_level end,
+      get=function(r) return PGET('light.light_level_report.light_level',r,0) end,
+      set=function(r,v) PSET('light.light_level_report.light_level',r,v) end,
+      changed=function(o,n) local ov,nv = PGET('light.light_level_report.light_level',o), PGET('light.light_level_report.light_level',nv) return nv~=ov,nv end,
     },
   }
   local light_level = classs('light_level',hueResource)
@@ -659,10 +683,10 @@ local function main()
     hueResource.__init(self,id)
   end
   function light_level:light_level()
-    return (self.rsrc.light.light_level_report or {}).light_level or 0
+    return PGET('light.light_level_report.light_level',self.rsrc,0)
   end
   function light_level:__tostring()
-    return fmt("[light_level:%s,%s,value:%s]",self.id,self:getName(),self:light_level())
+    return fmt("[light_level:%s,%s,value:%s]",self.id,self:getName(),self:light_level() or 0)
   end
   
   local bridge = classs('bridge',hueResource)

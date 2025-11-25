@@ -5,11 +5,11 @@
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
 --%%merge:HueV2Engine.lua,HueV2App.lua=HueV2File.lua
---%%file:HueV2Engine.lua,Engine
---%%file:HueV2App.lua,App
---%%file:HueV2Map.lua,Map
+-- %%file:HueV2Engine.lua,Engine
+-- %%file:HueV2App.lua,App
+-- %%file:HueV2Map.lua,Map
 --%% file:$fibaro.lib.betterqa,BetterQA
--- %%file:HueV2File.lua,HueV2
+--%%file:HueV2File.lua,HueV2
 --%%u:{label='info', text=''}
 --%%u:{button='restart', text='Restart', onReleased='restart'}
 --%%u:{button='dump', text='Dump resources', onReleased='dumpResources'}
@@ -38,6 +38,11 @@ local function init()
     --HUE:dumpDeviceTable()
     --HUE:listAllDevicesGrouped()
     HUE:app()
+    scenes = HUE:getResourceType('scene')
+    for id,scene in pairs(scenes) do
+      --print(scene.name)
+    end
+    --fibaro.call()
     end)
 end
 
@@ -77,4 +82,34 @@ function update()
     })
     setTimeout(init,0)
   end)
+end
+
+local var,cid,n = "RPC"..plugin.mainDeviceId,plugin.mainDeviceId,0
+local vinit,path = { name=var, value=""},"/plugins/"..cid.."/variables/"..var
+
+api.post("/plugins/"..cid.."/variables",{ name=var, value=""}) -- create var if not exist
+function fibaro._rpc(id,fun,args,timeout,qaf)
+  n = n + 1
+  api.put(path,vinit)
+  fibaro.call(id,"RPC_CALL",path,var,n,fun,args,qaf)
+  timeout = os.time()+(timeout or 3)
+  while os.time() < timeout do
+    local r,_ = api.get(path)
+    if r and r.value~="" then
+      r = r.value 
+      if r[1] == n then
+        if not r[2] then error(r[3],3) else return select(3,table.unpack(r)) end
+      end
+    end 
+  end
+  error(string.format("RPC timeout %s:%d",fun,id),3)
+end
+
+function fibaro.rpc(id,name,timeout) return function(...) return fibaro._rpc(id,name,{...},timeout) end end
+
+function QuickApp:RPC_CALL(path2,var2,n2,fun,args,qaf)
+  local res
+  if qaf then res = {n2,pcall(self[fun],self,table.unpack(args))}
+  else res = {n2,pcall(_G[fun],table.unpack(args))} end
+  api.put(path2,{name=var2, value=res}) 
 end

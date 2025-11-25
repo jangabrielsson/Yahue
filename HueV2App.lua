@@ -28,7 +28,10 @@ local devProps = {
   light = "LuxSensor",
   contact_report = "DoorSensor",
   motion = "MotionSensor",
-  [function(p) return p.on and not (p.color or p.dimming) and "plug" end] = "BinarySwitch",
+  -- [function(p) return p.on and not (p.color or p.dimming) and "plug" end] = "BinarySwitch",
+  -- [function(p) return p.color and p.color_temperature and 'colorlight' end] = "ColorLight",
+  -- [function(p) return p.color == nil and p.color_temperature and 'templight' end] = "TempLight",
+  -- [function(p) return p.color == nil and p.color_temperature==nil and p.dimming and 'dimlight' end] = "DimLight",
 }
 
 local defClasses
@@ -83,6 +86,7 @@ function HUEv2Engine:app()
   end
   
   local hdevs = {}
+  HUEDevices = HUEDevices or {}
   for _,d in ipairs(HUEDevices) do
     hdevs[d.class..":"..d.id] = d
   end
@@ -191,7 +195,6 @@ function defClasses()
     if self.properties.userDescription == nil or self.properties.userDescription == "" then
       local fmt = string.format
       local d = fmt("%s\n%s",self.dev.type,self.dev.id)
-      print(d)
       if self.dev.product_data then
         local pd = self.dev.product_data
         d = d..fmt("\n%s\n%s",pd.product_name or "",pd.model_id or "")
@@ -360,6 +363,65 @@ function defClasses()
   function MultilevelSensor.annotate(rsrc)
   end
   
+  class 'ColorLight'(HueClass)
+  ColorLight.htype = "com.fibaro.colorLight"
+  function ColorLight:__init(device)
+    HueClass.__init(self,device)
+    self.dev:subscribe("on",function(key,value,b)
+      self:print("on %s",value)
+      self:updateProperty("state",value)
+      if not value then self:updateProperty("value",0) end
+    end)
+    self.dev:subscribe("dimming",function(key,value,b)
+      self:print("dimming %s",value)
+      self:updateProperty("value",ROUND(value))   
+      if value>0 then self:updateProperty("state",true) end
+    end)
+    self.dev:subscribe("color",function(key,value,b)
+      if value.xy then
+        local r,g,b = HUE:xyToRgb(value.xy.x,value.xy.y,value.brightness or 100)
+        self:print("color xy %s,%s,%s",r,g,b)
+        self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+      elseif value.hue and value.saturation then
+        local r,g,b = HUE:hsvToRgb(value.hue/65535*360,value.saturation/254*100,value.brightness or 100)
+        self:print("color hs %s,%s,%s",r,g,b)
+        self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+      end
+    end)
+    self.dev:subscribe("color_temperature",function(key,value,b)
+      self:print("color_temperature %s",value)
+      self:updateProperty("colorTemperature",value)
+    end)
+    self.dev:publishAll()
+  end
+  function ColorLight:turnOn()
+    self:updateProperty("value", 100)
+    self:updateProperty("state", true)
+    self.dev:targetCmd({on = {on=true}})
+  end
+  function ColorLight:turnOff()
+    self:print("Turn off")
+    self:updateProperty("value", 0)
+    self:updateProperty("state", false)
+    self.dev:targetCmd({on = {on=false}})
+  end
+  function ColorLight:setValue(value)
+    if type(value)=='table' then value = value.values[1] end 
+    value = tonumber(value)
+    self:print("setValue")
+    self:updateProperty("value", value)
+    self.dev:targetCmd({dimming = {brightness=value}})
+  end
+  function ColorLight:setColor(value)
+    if type(value)=='table' then value = value.values[1] end
+    local r = tonumber(value:sub(1,2),16)
+    local g = tonumber(value:sub(3,4),16)
+    local b = tonumber(value:sub(5,6),16)
+    self:print("setColor %s,%s,%s",r,g,b)
+    local x,y = HUE:rgbToXy(r,g,b)
+    self.dev:targetCmd({color = {xy={x=x,y=y},brightness=ROUND((r+g+b)/3)}})
+  end
+  
   class 'RoomZoneQA'(HueClass)
   RoomZoneQA.htype = "com.fibaro.multilevelSwitch"
   function RoomZoneQA:__init(device)
@@ -446,6 +508,9 @@ function defClasses()
       self:print("Turn on Scene %s",scene.name)
       scene:recall()
     end
+  end
+  function RoomZoneQA:setEffect(effect)
+    self.dev:targetCmd({effect_v2 = {brightness=effect}})
   end
   function RoomZoneQA:turnOff()
     self:print("Turn off")

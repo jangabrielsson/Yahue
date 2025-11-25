@@ -1,19 +1,16 @@
-
 HUEDevices = {
 -- 'Stars', Zone
  {id='39e1fc25-e926-42e5-a840-b2d21aaa08f3', name='Stars', class='RoomZoneQA', enabled=false, args={}},
 -- 'Secure battery camera 1', Secure battery camera
- {id='77b1f0b8-8c20-428b-ba42-d4571bee137b', name='Secure battery camera 1', class='LuxSensor', enabled=false, args={}},
  {id='77b1f0b8-8c20-428b-ba42-d4571bee137b', name='Secure battery camera 1', class='MotionSensor', enabled=false, args={}},
+ {id='77b1f0b8-8c20-428b-ba42-d4571bee137b', name='Secure battery camera 1', class='LuxSensor', enabled=false, args={}},
 -- 'Guest room', Room
  {id='795959f5-9313-4aae-b930-b178b48249e0', name='Guest room', class='RoomZoneQA', enabled=false, args={}},
 -- 'Gymet', Zone
  {id='79e44c37-15e0-4d93-8d89-230b14822270', name='Gymet', class='RoomZoneQA', enabled=false, args={}},
 -- 'Hue tap dial switch 1', Hue tap dial switch
- {id='888cb832-5f11-46d0-b916-988ae158eeef', name='Hue tap dial switch 1', class='MultilevelSensor', enabled=false, args={}},
  {id='888cb832-5f11-46d0-b916-988ae158eeef', name='Hue tap dial switch 1', class='Button', enabled=false, args={}},
--- 'Hue smart plug 1', Hue smart plug
- {id='8a453c82-0072-4223-9c42-f395b5cb0c40', name='Hue smart plug 1', class='BinarySwitch', enabled=false, args={}},
+ {id='888cb832-5f11-46d0-b916-988ae158eeef', name='Hue tap dial switch 1', class='MultilevelSensor', enabled=false, args={}},
 -- 'Living room sensor', Hue motion sensor
  {id='9222ea53-37a6-4ac0-b57d-74bca1cfa23f', name='Living room sensor', class='MotionSensor', enabled=false, args={}},
  {id='9222ea53-37a6-4ac0-b57d-74bca1cfa23f', name='Living room sensor', class='TemperatureSensor', enabled=false, args={}},
@@ -30,10 +27,12 @@ HUEDevices = {
  {id='a8896574-f4a3-4e8a-af8e-737cfc262fc9', name='Sovrums Star', class='RoomZoneQA', enabled=false, args={}},
 -- 'Rest', Room
  {id='abc8b8fd-51f6-4ce9-9ad8-81d99806346f', name='Rest', class='RoomZoneQA', enabled=false, args={}},
+-- 'Balkong', Room
+ {id='b4bdd5b6-c6b3-4348-b422-de618e320cb0', name='Balkong', class='RoomZoneQA', enabled=true, args={}},
 -- 'Kitchen island', Zone
  {id='b5f12b5f-20c7-47a5-8535-c7a20fb9e66d', name='Kitchen island', class='RoomZoneQA', enabled=false, args={}},
 -- 'Hall', Room
- {id='bbe472e6-8ea8-477b-a116-ca345452e056', name='Hall', class='RoomZoneQA', enabled=true, args={}},
+ {id='bbe472e6-8ea8-477b-a116-ca345452e056', name='Hall', class='RoomZoneQA', enabled=false, args={}},
 -- 'Living room', Room
  {id='bcd3daec-82a9-4de7-813a-3464beee0090', name='Living room', class='RoomZoneQA', enabled=false, args={}},
 -- 'Front Door', Hue secure contact sensor
