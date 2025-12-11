@@ -8,7 +8,7 @@ local serial = "UPD896661234567893"
 HUEv2Engine = HUEv2Engine or {}
 local HUE = HUEv2Engine
 HUE.appName = "YahueV2"
-HUE.appVersion = tostring(_version)
+HUE.appVersion = tostring(VERSION)
 
 local function ROUND(i) return math.floor(i+0.5) end
 local function printf(fmt,...) print(string.format(fmt,...)) end

@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local version = 0.48
+local _version_e = 0.48
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -25,7 +25,7 @@ local function WARNING(fm,...) quickApp:warning(fmt(fm,...)) end
 local function ERROR(fm,...) quickApp:error(fmt(fm,...)) end
 
 HUEv2Engine = HUEv2Engine or {}
-HUEv2Engine.version = version
+HUEv2Engine.version = _version_e
 fibaro.hue = fibaro.hue or {}
 fibaro.hue.Engine = HUEv2Engine
 local function setup()
