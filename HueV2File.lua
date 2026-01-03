@@ -74,6 +74,7 @@ end
 local PGETCACHE = {}
 local function PGET(path,tab,dflt)
     local ps = PGETCACHE[path] or string.split(path,".")
+    if tab == nil then tab = {} end
     PGETCACHE[path] = ps
     for _,p in ipairs(ps) do
         tab = tab[p]
