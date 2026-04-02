@@ -1,0 +1,111 @@
+<!-- 
+  TEMPLATE for QuickApp development workspaces using plua.
+  Copy this file to your workspace as .github/copilot-instructions.md
+  Also copy .github/skills/ and .github/instructions/ folders.
+-->
+
+# QuickApp Development with plua
+
+You are helping develop Fibaro HC3 **QuickApps** using **plua** as the local Lua interpreter and emulator.
+
+## What is plua?
+
+plua is a Lua interpreter written in Python (using Lupa) that emulates the Fibaro HC3 QuickApp environment locally. It lets you write, run, and debug QuickApps on your machine without needing a physical HC3.
+
+**Install:** `pip install plua`
+
+**Run a QuickApp:**
+```bash
+plua --fibaro myQuickApp.lua          # run with Fibaro SDK
+plua --fibaro --run-for 0 myQA.lua   # run indefinitely (Ctrl+C to stop)
+plua --fibaro --nodebugger myQA.lua  # run without debugger (terminal testing)
+```
+
+**Execution control (`--run-for`):**
+- `--run-for 0` — run forever (needs Ctrl+C)
+- `--run-for 30` — run for at least 30 seconds, or until no active timers
+- `--run-for -30` — run for exactly 30 seconds regardless of timers
+- default — run until no active timers/callbacks remain
+
+## VS Code Integration
+
+Add this to `.vscode/launch.json` for F5 debugging:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Plua: Current Fibaro File",
+      "type": "luaMobDebug",
+      "request": "launch",
+      "workingDirectory": "${workspaceFolder}",
+      "sourceBasePath": "${workspaceFolder}",
+      "listenPort": 8172,
+      "stopOnEntry": false,
+      "sourceEncoding": "UTF-8",
+      "interpreter": "plua",
+      "arguments": ["--fibaro", "--run-for", "0", "${relativeFile}"],
+      "listenPublicly": true
+    }
+  ]
+}
+```
+
+Requires the **LuaMobDebug** VS Code extension.
+
+## QuickApp File Structure
+
+A QuickApp is a single `.lua` file with `--%%` headers at the top:
+
+```lua
+--%%name:My QuickApp
+--%%type:com.fibaro.binarySwitch
+--%%var:interval=30
+--%%debug:true
+--%%desktop:true
+
+function QuickApp:onInit()
+    self:debug(self.name, self.id)
+end
+
+function QuickApp:turnOn()
+    self:updateProperty("value", true)
+end
+
+function QuickApp:turnOff()
+    self:updateProperty("value", false)
+end
+```
+
+## Uploading to a Real HC3
+
+```bash
+plua --tool uploadQA myQuickApp.lua   # upload as new QA
+plua --tool updateQA myQuickApp.lua   # update existing QA (uses --%%project: header)
+```
+
+Requires HC3 connection configured in plua settings.
+
+---
+
+## QuickApp Development Skills
+
+Skill version: **1.1.0**
+
+Skills for Fibaro HC3 QuickApp development with plua, auto-discovered from `.github/skills/`.
+The instruction file `.github/instructions/quickapp-dev.instructions.md` is auto-applied to all `*.lua` files.
+
+Type a slash command in Copilot chat for detailed reference:
+
+- `/quickapp-api` — full fibaro.*, QuickApp methods, net.HTTPClient, timers
+- `/quickapp-types` — all 40+ device types, UI headers, starter templates
+- `/quickapp-patterns` — timer loops, refreshStates, HTTP, children, state persistence
+- `/hc3-rest-api` — HC3 REST endpoints with examples
+- `/lua-basics` — Lua language reference for non-Lua developers
+- `/plua-troubleshooting` — port conflicts, debugger warnings, common runtime errors
+- `/plua-setup` — install, HC3 credentials, --init-qa, VS Code integration, CLI flags, **`Lua.diagnostics.globals`**
+- `/quickapp-troubleshooting` — HTML in labels, UI callbacks, property persistence, HC3 vs plua differences
+- `/hc3vfs` — editing QA files in the VS Code hc3:// virtual filesystem (requires hc3-vfs extension)
+
+Always read the relevant skill **before** constructing an answer from scratch.

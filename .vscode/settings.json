@@ -1,6 +1,22 @@
 {
   "Lua.workspace.library": [
   ],
+  "Lua.workspace.ignoreDir": [
+    ".github"
+  ],
+  "Lua.diagnostics.globals": [
+    "QuickApp", "QuickAppBase", "QuickAppChild", "QuickerAppChild", "QwikAppChild",
+    "fibaro", "api", "net", "json", "plugin", "class", "hub", "quickApp",
+    "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+    "RefreshStateSubscriber", "sourceTrigger", "UDPServer",
+    "__TAG", "___id", "_sceneId", "__print",
+    "__setTimeout", "__clearTimeout",
+    "__fibaroUseAsyncHandler", "__fibaroSleep",
+    "__fibaro_get_global_variable", "__fibaro_get_device", "__fibaro_get_devices",
+    "__fibaro_get_room", "__fibaro_get_scene", "__fibaro_get_device_property",
+    "__fibaro_get_breached_partitions", "__fibaro_get_partition",
+    "__fibaro_add_debug_message", "__assert_type"
+  ],
   "git.inputValidation": true,
   "git.inputValidationLength": 72,
   "git.inputValidationSubjectLength": 50,
