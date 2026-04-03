@@ -774,7 +774,7 @@ local function main()
       handle_events(data)
       getw()
     end
-    function args.error(err) if err~="timeout" and err~="wantread" then ERROR("/eventstream: %s",err) end getw() end
+    function args.error(err) if not err:match("timed out") or err=="wantread" then ERROR("/eventstream: %s",err) end getw() end
     function getw() net.HTTPClient():request(eurl,args) end
     setTimeout(getw,0)
   end
@@ -807,7 +807,7 @@ local function main()
     setTimeout(getw,0)
   end
   
-  if fibaro.fibemu then fetchEvents = fetchEvents_emu
+  if fibaro.plua then fetchEvents = fetchEvents_emu
   else fetchEvents = fetchEvents_hc3 end
   
   function hueGET(api,event)

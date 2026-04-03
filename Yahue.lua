@@ -13,8 +13,9 @@
 --%%u:{button='restart', text='Restart', onReleased='restart'}
 --%%u:{{button='dump', text='Dump', onReleased='dumpResources'},{button='applyDevices', text='Apply selection', onReleased='applyDevices'}}
 
---%%desktop:true
---%%offline:true
+-- %%desktop:true
+-- %%offline:true
+--%%proxy:true
 
 -- Hue resource kind → Fibaro QA type mapping
 -- ┌─────────────────────┬──────────────────────────────────┬────────────────────────────────────────────┐
@@ -28,8 +29,8 @@
 -- │ MultilevelSensor    │ com.fibaro.multilevelSensor      │ device with 'relative_rotary' service      │
 -- │ BinarySwitch        │ com.fibaro.binarySwitch          │ light: on only (no dimming, no color)      │
 -- │ DimLight            │ com.fibaro.multilevelSwitch      │ light: on + dimming (no color/color_temp)  │
--- │ TempLight           │ com.fibaro.colorLight            │ light: on + dimming + color_temperature    │
--- │ ColorLight          │ com.fibaro.colorLight            │ light: on + dimming + color (xy)           │
+-- │ TempLight           │ com.fibaro.colorController       │ light: on + dimming + color_temperature    │
+-- │ ColorLight          │ com.fibaro.colorController       │ light: on + dimming + color (xy)           │
 -- │ RoomZoneQA          │ com.fibaro.multilevelSwitch      │ room or zone resource                      │
 -- └─────────────────────┴──────────────────────────────────┴────────────────────────────────────────────┘
 

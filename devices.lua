@@ -118,7 +118,7 @@ function HUE:app()
     options[#options+1] = {type='option', text=item.d.name..' ['..short..']', value=item.tag}
   end
   quickApp:updateView("devSelect","options",options)
-  quickApp:updateView("devSelect","values",validMapped)
+  quickApp:updateView("devSelect","selectedItems",validMapped)
   quickApp.hueSelection = validMapped
 end
 
@@ -412,12 +412,12 @@ function defClasses()
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- TempLight  →  com.fibaro.colorLight
+  -- TempLight  →  com.fibaro.colorController
   -- Hue service: light with on + dimming + color_temperature (no xy color).
   -- setColorTemperature() sets Hue color_temperature (mirek) via light:setTemperature().
   -- ─────────────────────────────────────────────────────────────────────────
   class 'TempLight'(HueClass)
-  TempLight.htype = "com.fibaro.colorLight"
+  TempLight.htype = "com.fibaro.colorController"
   function TempLight:__init(device)
     HueClass.__init(self,device)
     self.light = self.dev:findServiceByType('light')[1] or self.dev
@@ -459,13 +459,13 @@ function defClasses()
   function TempLight.annotate() end
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- ColorLight  →  com.fibaro.colorLight
+  -- ColorLight  →  com.fibaro.colorController
   -- Hue service: light with on + dimming + color (xy) [+ optional color_temperature].
   -- setColor("RRGGBB") converts RGB to CIE xy via HUE:rgbToXy() and sends to Hue.
   -- annotate() adds the color interface.
   -- ─────────────────────────────────────────────────────────────────────────
   class 'ColorLight'(HueClass)
-  ColorLight.htype = "com.fibaro.colorLight"
+  ColorLight.htype = "com.fibaro.colorController"
   function ColorLight:__init(device)
     HueClass.__init(self,device)
     self.light = self.dev:findServiceByType('light')[1] or self.dev
@@ -484,6 +484,7 @@ function defClasses()
         local r,g,b0 = HUE:xyToRgb(value.xy.x,value.xy.y,value.brightness or 100)
         self:print("color xy %s,%s,%s",r,g,b0)
         self:updateProperty("color",string.format("%02X%02X%02X",r,g,b0))
+        self:updateProperty("colorComponents",{red=r,green=g,blue=b0,white=0})
       end
     end)
     self.dev:subscribe("color_temperature",function(key,value,b)
@@ -516,10 +517,36 @@ function defClasses()
     self:print("setColor %s,%s,%s",r,g,b)
     local x,y = HUE:rgbToXy(r,g,b)
     self.light:sendCmd({color={xy={x=x,y=y}}})
+    self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+    self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
+  end
+  function ColorLight:setColorComponents(value)
+    if type(value)=='table' and value.values then value = value.values[1] end
+    local cur = self.properties.colorComponents or {red=0,green=0,blue=0,warmWhite=0}
+    local r = tonumber(value.red)       or cur.red       or 0
+    local g = tonumber(value.green)     or cur.green     or 0
+    local b = tonumber(value.blue)      or cur.blue      or 0
+    local w = tonumber(value.warmWhite) or cur.warmWhite or 0
+    self:print("setColorComponents r=%s g=%s b=%s w=%s",r,g,b,w)
+    local hasRGB = value.red ~= nil or value.green ~= nil or value.blue ~= nil
+    if hasRGB then
+      local x,y = HUE:rgbToXy(r,g,b)
+      self.light:sendCmd({color={xy={x=x,y=y}}})
+      self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+    elseif value.warmWhite ~= nil then
+      -- Map warmWhite 0-255 to mirek range 153 (6500K cool) to 454 (2200K warm)
+      local mirek = math.floor(153 + (w/255)*(454-153))
+      self.light:sendCmd({color_temperature={mirek=mirek}})
+      self:updateProperty("colorTemperature",mirek)
+    end
+    self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=w})
   end
   function ColorLight.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
-    table.insert(rsrc.interfaces,"color")
+    table.insert(rsrc.interfaces,"ringColor")
+    table.insert(rsrc.interfaces,"colorTemperature")
+    rsrc.properties = rsrc.properties or {}
+    rsrc.properties.colorComponents = {red=0,green=0,blue=0,warmWhite=0}
   end
   
   -- ─────────────────────────────────────────────────────────────────────────
