@@ -774,7 +774,7 @@ local function main()
       handle_events(data)
       getw()
     end
-    function args.error(err) if not err:match("timed out") or err=="wantread" then ERROR("/eventstream: %s",err) end getw() end
+    function args.error(err) if not err:match("timed out") and err~="wantread" then ERROR("/eventstream: %s",err) end getw() end
     function getw() net.HTTPClient():request(eurl,args) end
     setTimeout(getw,0)
   end
