@@ -10,14 +10,16 @@
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
 --%%u:{label='info', text=''}
---%%u:{select='releaseSelect', text='Recovery: Select release', value='', options={}, onToggled='installRelease'}
+--%%u:{label='huedevs', text='Hue devices found:'}
 --%%u:{multi='devSelect', text='Devices', values={}, options={}, onToggled='devSelChanged'}
 --%%u:{{button='pairHue', text='Pair with bridge', onReleased='pairHue'},{button='restart', text='Restart', onReleased='restart'}}
 --%%u:{{button='dump', text='Dump', onReleased='dumpResources'},{button='applyDevices', text='Apply selection', onReleased='applyDevices'}}
+--%%u:{label='releases', text='Available releases:'}
+--%%u:{select='releaseSelect', text='Recovery: Select release', value='', options={}, onToggled='installRelease'}
 
 -- %%desktop:true
 -- %%offline:true
---%%proxy:true
+-- %%proxy:true
 
 -- Hue resource kind → Fibaro QA type mapping
 -- ┌─────────────────────┬──────────────────────────────────┬────────────────────────────────────────────┐
@@ -77,8 +79,8 @@ function QuickApp:onInit()
     init()
   else 
     self:updateView("info","text","Missing engine files — select a release to restore")
-    fetchReleases()
   end
+  fetchReleases()  -- Always populate releases (for recovery or version switching)
   -- setTimeout(function() -- test signal
   --   print("Start signal for 5sec")
   --   fibaro.call(4222, "signal", "alternating", 30000, {"FF0000","0000FF"}) 
@@ -150,12 +152,28 @@ function fetchReleases()
       
       local options = {{type='option', text='-- Choose version --', value=''}}
       for _, rel in ipairs(releases) do
-        if rel.tag_name and rel.assets then
-          options[#options+1] = {type='option', text=rel.tag_name, value=rel.tag_name}
+        if rel.tag_name then
+          -- Mark releases without .fqa asset with a note
+          local hasFqa = false
+          for _, asset in ipairs(rel.assets or {}) do
+            if asset.name == "Yahue.fqa" then
+              hasFqa = true
+              break
+            end
+          end
+          local label = rel.tag_name
+          if not hasFqa then label = label .. " (no asset)" end
+          options[#options+1] = {type='option', text=label, value=rel.tag_name}
         end
       end
       self:updateView("releaseSelect", "options", options)
       self:debug("Loaded "..#releases.." releases")
+    end,
+    error = function(err)
+      self:error("Fetching releases: "..tostring(err))
+    end
+  })
+end
     end,
     error = function(err)
       self:error("Fetching releases: "..tostring(err))

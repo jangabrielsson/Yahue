@@ -27,7 +27,7 @@ VERSION_FILE=".version"
 # Source files that contain version declarations
 # Format: "path:pattern" where pattern is the sed search pattern
 declare -a VERSION_FILES=(
-    "Yahue.lua:local VERSION"
+    "devices.lua:local VERSION"
 )
 
 # ============================================================================
