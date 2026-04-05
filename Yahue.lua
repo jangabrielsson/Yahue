@@ -6,7 +6,6 @@
 --%%var:Hue_User=config.Hue_user
 --%%file:engine.lua,Engine
 --%%file:$fibaro.lib.qwikchild,qwickchild
---%%file:userconfig.lua,UserConfig
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
 --%%u:{label='info', text=''}
@@ -49,16 +48,6 @@ local function isEngineReady(engine)
     and type(engine.appVersion) == "string"
 end
 
-local function hasExistingUserConfig(currentFiles)
-  for _, f in ipairs(currentFiles or {}) do
-    if f.name == "UserConfig" then
-      local content = f.content
-      return type(content) == "string" and #content > 0
-    end
-  end
-  return false
-end
-
 local function init()
   local self = quickApp
   if not isEngineReady(HUE) then
@@ -91,6 +80,7 @@ end
 
 function QuickApp:onInit()
   quickApp = self
+  pcall(require, "include.UserConfig")
   HUE = fibaro.engine
   local updated = self:getVariable("update")
   if updated=="yes" then
@@ -247,15 +237,13 @@ function QuickApp:installRelease(event)
           
           self:updateView("info", "text", "Installing "..tag.."...")
           
-          -- Build batch: preserve UserConfig only if an existing non-empty file is present.
-          local currentFiles = api.get("/quickApp/"..self.id.."/files") or {}
-          local preserveUserConfig = hasExistingUserConfig(currentFiles)
+          -- Build batch from package, but never take packaged UserConfig.
+          -- HC3 keeps files not present in the batch unchanged.
+          self:debug("Keeping existing UserConfig unchanged (if present)")
           
           local batch = {}
           for _,f in ipairs(fqa.files) do
-            if f.name == "UserConfig" and preserveUserConfig then
-              self:debug("Preserving UserConfig")
-            else
+            if f.name ~= "UserConfig" then
               batch[#batch+1] = { name=f.name, isMain=f.isMain or false, isOpen=false, content=f.content }
             end
           end
@@ -287,16 +275,14 @@ function update()
         quickApp:error("Failed to parse Yahue.fqa")
         return
       end
-      -- Preserve UserConfig only if an existing non-empty file is present.
-      local currentFiles = api.get("/quickApp/"..quickApp.id.."/files") or {}
-      local preserveUserConfig = hasExistingUserConfig(currentFiles)
+      -- Build batch from package, but never take packaged UserConfig.
+      -- HC3 keeps files not present in the batch unchanged.
+      quickApp:debug("Keeping existing UserConfig unchanged (if present)")
 
-      -- Build batch: include all files from the .fqa except UserConfig if it already exists
+      -- Build batch: include all files from the .fqa except UserConfig
       local batch = {}
       for _,f in ipairs(fqa.files) do
-        if f.name == "UserConfig" and preserveUserConfig then
-          quickApp:debug("Skipping UserConfig (preserving user customisations)")
-        else
+        if f.name ~= "UserConfig" then
           batch[#batch+1] = { name=f.name, isMain=f.isMain or false, isOpen=false, content=f.content }
         end
       end
