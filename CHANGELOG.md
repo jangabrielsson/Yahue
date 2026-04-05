@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.77] - 2026-04-05
+
+## Changes in v0.0.77
+
+- ✨ **Feature**: Add release notes and forum post helper for v0.0.76
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.76] - 2026-04-05
 
 ## Changes in v0.0.76
