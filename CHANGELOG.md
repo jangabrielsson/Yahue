@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.0.74] - 2026-04-05
+
+## Changes in v0.0.74
+
+- ✨ **Feature**: Implement feature X to enhance user experience and optimize performance
+- ✨ **Feature**: Add user configuration preservation logic and create HTML release notes for v0.0.73
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.73] - 2026-04-05
 
 ## Changes in v0.0.73
