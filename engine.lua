@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.48
+local _version_e = 0.50
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -73,6 +73,7 @@ end
 
 local PGETCACHE = {}
 local function PGET(path,tab,dflt)
+---@diagnostic disable-next-line: undefined-field
     local ps = PGETCACHE[path] or string.split(path,".")
     if tab == nil then tab = {} end
     PGETCACHE[path] = ps
@@ -85,11 +86,12 @@ end
 
 local function PSET(path,tab,val)
     if tab == nil then tab = {} end
-    local ps,t,p = PGETCACHE[path] or string.split(path,"."),tab
+---@diagnostic disable-next-line: undefined-field
+    local ps,t,p = PGETCACHE[path] or string.split(path,"."),tab,nil
     PGETCACHE[path] = ps
     for i=1,#ps-1 do
         p = ps[i]
-        if t[p] == nil then t[p] = {} end
+        if p and t[p] == nil then t[p] = {} end
         t = t[p]
     end
     t[ps[#ps]] = val
@@ -156,7 +158,7 @@ local function main()
     { subscribe=function(_,_,_) end, publishMySubs=function() end, publishAll=function() end } 
   end
   
-  local function classs(name,parent)
+  local function defClass(name,parent)
     local p = class(name)
     local cl = _G[name]
     classes[name] = cl
@@ -168,7 +170,7 @@ local function main()
   ---------------------------------------------------------------------------
   -- RESOURCE CLASS DEFINITIONS
   ---------------------------------------------------------------------------
-  local hueResource = classs('hueResource')
+  local hueResource = defClass('hueResource')
   function hueResource:__init(rsrc) self:setup(rsrc) end
   
   function hueResource:setup(rsrc)
@@ -304,13 +306,13 @@ local function main()
   end
   -------
   
-  local homekit = classs('homekit',hueResource)
+  local homekit = defClass('homekit',hueResource)
   function homekit:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[homekit:%s]",self.id)
   end
   
-  local device = classs('device',hueResource)
+  local device = defClass('device',hueResource)
   function device:__init(id)
     hueResource.__init(self,id)
     self.archetype = self.rsrc.metadata.archetype
@@ -330,7 +332,7 @@ local function main()
     end
   end
   
-  local light = classs('light',hueResource)
+  local light = defClass('light',hueResource)
   function light:__init(id)
     hueResource.__init(self,id)
     self.archetype = resolve(self.owner).archetype or "unknown_archetype"
@@ -418,7 +420,7 @@ local function main()
       changed=function(o,n) return o.status~=n.status,n.status end,
     },
   }
-  local zigbee_connectivity = classs('zigbee_connectivity',hueResource)
+  local zigbee_connectivity = defClass('zigbee_connectivity',hueResource)
   function zigbee_connectivity:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[zigbee_connectivity:%s,%s]",self.id,self:getName("CON"))
@@ -434,7 +436,7 @@ local function main()
       changed=function(o,n) local s0,s1 = o.power_state,n.power_state return s0.battery_state~=s1.battery_state or s0.battery_level~=s1.battery_level,s1  end
     },
   }
-  local device_power = classs('device_power',hueResource)
+  local device_power = defClass('device_power',hueResource)
   function device_power:__init(id)
     hueResource.__init(self,id)
   end
@@ -452,7 +454,7 @@ local function main()
     status={get=function(r) return r.status end,set=function(r,v) r.status=v end},
   }
   meths.zgp_connectivity = { connected=true }
-  local zgp_connectivity = classs('zgp_connectivity',hueResource)
+  local zgp_connectivity = defClass('zgp_connectivity',hueResource)
   function zgp_connectivity:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[zgp_connectivity:%s,%s]",self.id,self:getName("ZGP"))
@@ -461,13 +463,13 @@ local function main()
     return self.rsrc.status=="connected"
   end
   
-  local zigbee_device_discovery = classs('zigbee_device_discovery',hueResource)
+  local zigbee_device_discovery = defClass('zigbee_device_discovery',hueResource)
   function zigbee_device_discovery:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[zigbee_device_discovery:%s,%s]",self.id,self:getName("ZDD"))
   end
   
-  local device_software_update = classs('device_software_update',hueResource)
+  local device_software_update = defClass('device_software_update',hueResource)
   function device_software_update:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[device_software_update:%s,%s]",self.id,self:getName("DSU"))
@@ -480,7 +482,7 @@ local function main()
       changed=function(o,n) return o.contact_report.state~=n.contact_report.state,n.contact_report.state end,
     },
   }
-  local contact = classs('contact',hueResource)
+  local contact = defClass('contact',hueResource)
   function contact:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[contact:%s,%s]",self.id,self:getName("CON"))
@@ -493,32 +495,32 @@ local function main()
       changed=function(o,n) return o.tamper[1].state~=n.tamper[1].state,n.tamper[1].state end,
     },
   }
-  local tamper = classs('tamper',hueResource)
+  local tamper = defClass('tamper',hueResource)
   function tamper:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[tamper:%s,%s]",self.id,self:getName("TAM"))
   end
   
-  local matter = classs('matter',hueResource)
+  local matter = defClass('matter',hueResource)
   function matter:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[matter:%s,%s]",self.id,self:getName("MATT"))
   end
   
-  local entertainment = classs('entertainment',hueResource)
+  local entertainment = defClass('entertainment',hueResource)
   function entertainment:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[entertainment:%s,%s]",self.id,self:getName("ENT"))
   end
   
-  local entertainment_configuration = classs('entertainment_configuration',hueResource)
+  local entertainment_configuration = defClass('entertainment_configuration',hueResource)
   function entertainment_configuration:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[entertainment_configuration:%s,%s]",self.id,self:getName("ENT_CFG"))
   end
   
   meths.room = { targetCmd=true }
-  local room = classs('room',hueResource)
+  local room = defClass('room',hueResource)
   function room:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[room:%s,%s,%s]",self.id,self.name,self.resourceType)
@@ -534,7 +536,7 @@ local function main()
   end
   
   meths.zone = { targetCmd=true }
-  local zone = classs('zone',hueResource)
+  local zone = defClass('zone',hueResource)
   function zone:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[zone:%s,%s,%s]",self.id,self.name,self.resourceType)
@@ -551,7 +553,7 @@ local function main()
   
   props.grouped_light = props.light
   meths.grouped_light = meths.light
-  local grouped_light = classs('grouped_light',hueResource)
+  local grouped_light = defClass('grouped_light',hueResource)
   function grouped_light:__init(id)
     hueResource.__init(self,id)
     pruneLights(self)
@@ -600,7 +602,7 @@ local function main()
   end
   
   meths.scene = { recall=true, targetCmd=true }
-  local scene = classs('scene',hueResource)
+  local scene = defClass('scene',hueResource)
   function scene:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[scene:%s,%s]",self.id,self.name)
@@ -623,7 +625,7 @@ local function main()
       end
     }
   }
-  local button = classs('button',hueResource)
+  local button = defClass('button',hueResource)
   function button:__init(id)
     hueResource.__init(self,id)
   end
@@ -645,7 +647,7 @@ local function main()
       end
     }
   }
-  local relative_rotary = classs('relative_rotary',hueResource)
+  local relative_rotary = defClass('relative_rotary',hueResource)
   function relative_rotary:__init(id)
     hueResource.__init(self,id)
   end
@@ -667,7 +669,7 @@ local function main()
     },
   }
   
-  local temperature = classs('temperature',hueResource)
+  local temperature = defClass('temperature',hueResource)
   function temperature:__init(id)
     hueResource.__init(self,id)
   end
@@ -685,7 +687,7 @@ local function main()
       changed=function(o,n) local ov,nv = PGET('motion.motion_report.motion',o), PGET('motion.motion_report.motion',n) return nv~=ov,nv end
     },
   }
-  local motion = classs('motion',hueResource)
+  local motion = defClass('motion',hueResource)
   function motion:__init(id)
     hueResource.__init(self,id)
   end
@@ -703,7 +705,7 @@ local function main()
       changed=function(o,n) local ov,nv = PGET('motion.motion_report.motion',o), PGET('motion.motion_report.motion',n) return nv~=ov,nv end
     },
   }
-  local camera_motion = classs('camera_motion',hueResource)
+  local camera_motion = defClass('camera_motion',hueResource)
   function camera_motion:__init(id)
     hueResource.__init(self,id)
   end
@@ -721,7 +723,7 @@ local function main()
       changed=function(o,n) local ov,nv = PGET('light.light_level_report.light_level',o), PGET('light.light_level_report.light_level',n) return nv~=ov,nv end,
     },
   }
-  local light_level = classs('light_level',hueResource)
+  local light_level = defClass('light_level',hueResource)
   function light_level:__init(id)
     hueResource.__init(self,id)
   end
@@ -732,37 +734,37 @@ local function main()
     return fmt("[light_level:%s,%s,value:%s]",self.id,self:getName(),self:light_level() or 0)
   end
   
-  local bridge = classs('bridge',hueResource)
+  local bridge = defClass('bridge',hueResource)
   function bridge:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[bridge:%s]",self.id)
   end
   
-  local bridge_home = classs('bridge_home',hueResource)
+  local bridge_home = defClass('bridge_home',hueResource)
   function bridge_home:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[bridge_home:%s]",self.id)
   end
   
-  local behavior_script = classs('behavior_script',hueResource)
+  local behavior_script = defClass('behavior_script',hueResource)
   function behavior_script:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[behavior_script:%s,%s,%s]",self.id,self.rsrc.metadata.name,self.rsrc.metadata.category)
   end
   
-  local behavior_instance = classs('behavior_instance',hueResource)
+  local behavior_instance = defClass('behavior_instance',hueResource)
   function behavior_instance:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[behavior_instance:%s,%s,%s]",self.id,self.rsrc.metadata.name,self.rsrc.metadata.category)
   end
   
-  local geolocation = classs('geolocation',hueResource)
+  local geolocation = defClass('geolocation',hueResource)
   function geolocation:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[geolocation:%s]",self.id)
   end
   
-  local geofence_client = classs('geofence_client',hueResource)
+  local geofence_client = defClass('geofence_client',hueResource)
   function geofence_client:__init(id)
     hueResource.__init(self,id)
     self._str = fmt("[geofence_client:%s]",self.id)

@@ -111,6 +111,18 @@ The `UserConfig` file is **never overwritten by auto-update**.
 
 ---
 
+## Per-child QuickApp variables
+
+Some child device behaviours can be tuned by setting a **QuickApp Variable** directly on the child device. These are read once at initialisation (when the child is loaded after a restart).
+
+| Variable | Applies to | Type | Default | Description |
+|---|---|---|---|---|
+| `dimdelay` | `ColorLight`, `RoomZoneQA` | number (ms) | `8000` | Total duration of a smooth brightness ramp triggered by `startLevelIncrease` or `startLevelDecrease`. The actual ramp time is scaled proportionally to the current brightness level, so the ramp always takes at most this many milliseconds to travel the full 0–100 range. |
+
+> **How to set it:** Open the child device in the HC3 UI, go to **Advanced → QuickApp Variables**, add a variable named `dimdelay` with a numeric value in milliseconds (e.g. `4000` for a 4-second ramp). Restart the parent QuickApp for the change to take effect.
+
+---
+
 ## Room / Zone controller
 
 Room and zone devices (`RoomZoneQA`) give you full control over a Hue group.
@@ -194,8 +206,8 @@ Full-colour lights.
 | `setColor` | `"RRGGBB"` | Sets colour from hex string, e.g. `"FF0000"` for red |
 | `setColorComponents` | `{red,green,blue,warmWhite}` | Sets colour by component (0–255 each). RGB triggers colour mode; warmWhite alone triggers colour temperature mode |
 | `setColorTemperature` | `mirek` (153–454) | Sets colour temperature |
-| `startLevelIncrease` | — | Smooth ramp to 100% |
-| `startLevelDecrease` | — | Smooth ramp to 0% |
+| `startLevelIncrease` | — | Smooth ramp to 100% (duration controlled by `dimdelay` QA variable, default 8 s) |
+| `startLevelDecrease` | — | Smooth ramp to 0% (duration controlled by `dimdelay` QA variable, default 8 s) |
 | `stopLevelChange` | — | Stops any active ramp |
 | `signal` | `sig, duration_ms, colors` | Signalling effect (see below) |
 | `setEffect` | `effect` | Looping light effect (see below) |
@@ -215,8 +227,8 @@ Controls all lights in a Hue room or zone simultaneously.
 | `setColor` | `"RRGGBB"` | Sets group colour from hex string |
 | `setColorComponents` | `{red,green,blue,warmWhite}` | Sets group colour by component |
 | `setColorTemperature` | `mirek` (153–454) | Sets group colour temperature |
-| `startLevelIncrease` | — | Smooth group ramp to 100% |
-| `startLevelDecrease` | — | Smooth group ramp to 0% |
+| `startLevelIncrease` | — | Smooth group ramp to 100% (duration controlled by `dimdelay` QA variable, default 8 s) |
+| `startLevelDecrease` | — | Smooth group ramp to 0% (duration controlled by `dimdelay` QA variable, default 8 s) |
 | `stopLevelChange` | — | Stops group ramp |
 | `setScene` | `sceneId` | Stores a scene UUID to recall on next `turnOn` |
 | `signal` | `sig, duration_ms, colors` | Signalling effect on all group lights (see below) |

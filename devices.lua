@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.0.68"
+local VERSION = "0.0.70"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -578,7 +578,7 @@ function defClasses()
   ColorLight.htype = "com.fibaro.colorController"
   function ColorLight:__init(device)
     HueClass.__init(self,device)
-    self.dimdelay = 8000
+    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
@@ -689,7 +689,7 @@ function defClasses()
   RoomZoneQA.htype = "com.fibaro.colorController"
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
-    self.dimdelay = 8000
+    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
     self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
     
     -- Check room/zone dead status
