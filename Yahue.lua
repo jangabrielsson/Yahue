@@ -174,12 +174,6 @@ function fetchReleases()
     end
   })
 end
-    end,
-    error = function(err)
-      self:error("Fetching releases: "..tostring(err))
-    end
-  })
-end
 
 function QuickApp:installRelease(event)
   local tag = event.values[1] or (type(event) == 'string' and event) or ''
