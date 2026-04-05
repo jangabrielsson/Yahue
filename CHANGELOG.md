@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.0.69] - 2026-04-05
+
+## Changes in v0.0.69
+
+- ✨ **Feature**: Refactor project configuration: Update version files and artifacts
+  - Changed version file from "HueV2App.lua" to "Yahue.lua".
+  - Updated artifact build command to reflect the new source file "Yahue.lua".
+  - Modified release files to include "Yahue.lua" and additional necessary files, while removing obsolete ones.
+- ♻️ **Refactor**: simplify scm.inputFontFamily setting
+- ✨ **Feature**: fix
+- ✨ **Feature**: fix
+- ✨ **Feature**: Fix
+- ✨ **Feature**: Fixes
+- ✨ **Feature**: Fixes
+- ✨ **Feature**: New version
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.68] - 2025-10-17
 
 ## Changes in v0.0.68
