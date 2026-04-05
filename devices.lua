@@ -7,6 +7,7 @@ local VERSION = "0.0.68"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
+HUE.typeOverrides = HUE.typeOverrides or {}  -- safety fallback if userconfig.lua is absent
 HUE.appName = "YahueV2"
 HUE.appVersion = tostring(VERSION)
 
@@ -51,7 +52,7 @@ local function buildChildren(ddevices, tags)
         local cls = _G[data.class]
         children[tag] = {
           name = dev.name,
-          type = cls and cls.htype or "com.fibaro.deviceController",
+          type = HUE.typeOverrides[data.id] or (cls and cls.htype) or "com.fibaro.deviceController",
           className = data.class,
           interfaces = dev:getProps()['power_state'] and {'battery'} or nil,
         }
@@ -96,6 +97,11 @@ function HUE:app()
   for id,zr in pairs(HUE:getResourceType('room')) do
     local tag = "RoomZoneQA:"..id
     ddevices[tag] = { name=zr.name or tag, id=id, class="RoomZoneQA" }
+  end
+  for id,_ in pairs(HUE:getResourceType('motion_area_configuration')) do
+    local dev = HUE:getResource(id)
+    local tag = "MotionAreaSensor:"..id
+    ddevices[tag] = { name=dev:getName("MotionArea-"..id:sub(1,8)), id=id, class="MotionAreaSensor" }
   end
   HUE._ddevices = ddevices
 
@@ -179,6 +185,75 @@ function defClasses()
     self:debug(string.format(fmt,...))
     __TAG = TAG
   end
+  -- Recalls the Hue scene whose ID is in event.values[1] (from sceneSelect dropdown).
+  function HueClass:sceneChanged(event)
+    local sceneId = event.values[1]
+    if not sceneId or sceneId == '' then return end
+    local sc = HUE:getResource(sceneId)
+    if sc then
+      self:print("Recall scene %s", sc.name)
+      sc:recall()
+    end
+  end
+  -- Triggers a signaling effect on the light or group.
+  -- sig:        "on_off"        – blink max brightness / off (no color needed)
+  --             "on_off_color"  – blink off / color (1 hex color required)
+  --             "alternating"   – alternate between 2 colors (2 hex colors required)
+  --             "stop"          – cancel any active signal immediately
+  -- duration_ms: 1000–65534000 (rounded to nearest second). Default 5000. Ignored for "stop".
+  -- colors:     optional list of 1–2 RRGGBB hex strings, e.g. {"FF0000","0000FF"}
+  -- Examples:
+  --   child:signal("on_off", 5000)                            -- doorbell flash
+  --   child:signal("on_off_color", 10000, {"FF0000"})         -- red alert
+  --   child:signal("alternating", 30000, {"FF0000","0000FF"}) -- police lights
+  --   child:signal("stop")                                    -- cancel
+  function HueClass:signal(sig, duration_ms, colors)
+    if type(sig) == 'table' then
+      local v = sig.values or sig
+      sig         = v[1]
+      duration_ms = v[2]
+      colors      = v[3]
+    end
+    local svc = rawget(self,'light') or rawget(self,'group')
+    if svc and svc.signal then
+      svc:signal(sig, duration_ms, colors)
+    end
+  end
+  -- Sets a continuous looping effect on the light.
+  -- effect: "fire"|"candle"|"sparkle"|"glisten"|"prism"|"opal"|"underwater"|"cosmos"|"sunbeam"|"enchant"|"stop"
+  -- "stop" cancels any active effect. Not supported on room/zone devices.
+  -- Example: child:setEffect("fire")  /  child:setEffect("stop")
+  function HueClass:setEffect(effect)
+    if type(effect) == 'table' then effect = (effect.values or effect)[1] end
+    local svc = rawget(self,'light')
+    if svc and svc.setEffect then svc:setEffect(effect) end
+  end
+  -- Plays a one-shot timed effect that ends after duration_ms.
+  -- effect:   "sunrise"|"sunset"|"stop"
+  -- duration: 1000–21600000 ms (required unless stopping). Ignored for "stop".
+  -- Example: child:setTimedEffect("sunrise", 60000)  /  child:setTimedEffect("stop")
+  function HueClass:setTimedEffect(effect, duration_ms)
+    if type(effect) == 'table' then
+      local v = effect.values or effect
+      effect, duration_ms = v[1], v[2]
+    end
+    local svc = rawget(self,'light')
+    if svc and svc.setTimedEffect then svc:setTimedEffect(effect, duration_ms) end
+  end
+
+  -- Populates the 'sceneSelect' dropdown for a RoomZoneQA child.
+  -- Finds all scenes whose group is this room/zone resource directly.
+  local function loadScenesForRoom(child)
+    local groupId = child.uid
+    local options = {{type='option', text='- None -', value=''}}
+    for id, sc in pairs(HUE:getResourceType('scene')) do
+      if sc.rsrc and sc.rsrc.group and sc.rsrc.group.rid == groupId then
+        options[#options+1] = {type='option', text=sc.name, value=id}
+      end
+    end
+    table.sort(options, function(a, b) return a.text < b.text end)
+    child:updateView("sceneSelect", "options", options)
+  end
   
   -- ─────────────────────────────────────────────────────────────────────────
   -- TemperatureSensor  →  com.fibaro.temperatureSensor
@@ -258,6 +333,38 @@ function defClasses()
   end
   function MotionSensor.annotate() end
   
+  -- ─────────────────────────────────────────────────────────────────────────
+  -- MotionAreaSensor  →  com.fibaro.motionSensor
+  -- Hue resource type: motion_area_configuration.
+  -- Subscribes to each motion sensor service listed in rsrc.motion_sensors[].
+  -- Reports true if ANY of the member sensors currently detects motion (OR logic).
+  -- ─────────────────────────────────────────────────────────────────────────
+  class 'MotionAreaSensor'(HueClass)
+  MotionAreaSensor.htype = "com.fibaro.motionSensor"
+  function MotionAreaSensor:__init(device)
+    HueClass.__init(self, device)
+    local states = {}
+    local function refresh()
+      local any = false
+      for _,v in pairs(states) do any = any or v end
+      self:updateProperty("value", any)
+    end
+    local sensors = self.dev.rsrc and self.dev.rsrc.motion_sensors or {}
+    for _, ref in ipairs(sensors) do
+      local svc = HUE:getResource(ref.rid)
+      if svc then
+        states[ref.rid] = false
+        svc:subscribe("motion", function(key, value)
+          self:print("motion %s from %s", value, ref.rid:sub(1,8))
+          states[ref.rid] = value or false
+          refresh()
+        end)
+        svc:publishAll()
+      end
+    end
+  end
+  function MotionAreaSensor.annotate() end
+
   -- ─────────────────────────────────────────────────────────────────────────
   -- Button  →  com.fibaro.remoteController
   -- Hue service: button. Translates Hue button events to HC3 centralSceneEvents.
@@ -456,7 +563,10 @@ function defClasses()
     if type(value)=='table' then value = value.values[1] end
     self.light:setTemperature(tonumber(value))
   end
-  function TempLight.annotate() end
+  function TempLight.annotate(rsrc)
+    rsrc.interfaces = rsrc.interfaces or {}
+    table.insert(rsrc.interfaces,"levelChange")
+  end
 
   -- ─────────────────────────────────────────────────────────────────────────
   -- ColorLight  →  com.fibaro.colorController
@@ -468,6 +578,7 @@ function defClasses()
   ColorLight.htype = "com.fibaro.colorController"
   function ColorLight:__init(device)
     HueClass.__init(self,device)
+    self.dimdelay = 8000
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
@@ -509,6 +620,21 @@ function defClasses()
     self:updateProperty("value",value)
     self.light:setDim(value)
   end
+  function ColorLight:startLevelIncrease()
+    self:print("startLevelIncrease")
+    local val = self.properties.value
+    val = ROUND((100-val)/100.0*self.dimdelay)
+    self.light:setDim(100,val)
+  end
+  function ColorLight:startLevelDecrease()
+    self:print("startLevelDecrease")
+    local val = self.properties.value
+    val = ROUND((val-0)/100.0*self.dimdelay)
+    self.light:setDim(0,val)
+  end
+  function ColorLight:stopLevelChange()
+    self.light:setDim(-1)
+  end
   function ColorLight:setColor(value)
     if type(value)=='table' then value = value.values[1] end
     local r = tonumber(value:sub(1,2),16)
@@ -545,6 +671,7 @@ function defClasses()
     rsrc.interfaces = rsrc.interfaces or {}
     table.insert(rsrc.interfaces,"ringColor")
     table.insert(rsrc.interfaces,"colorTemperature")
+    table.insert(rsrc.interfaces,"levelChange")
     rsrc.properties = rsrc.properties or {}
     rsrc.properties.colorComponents = {red=0,green=0,blue=0,warmWhite=0}
   end
@@ -559,10 +686,11 @@ function defClasses()
   -- annotate() adds the levelChange interface.
   -- ─────────────────────────────────────────────────────────────────────────
   class 'RoomZoneQA'(HueClass)
-  RoomZoneQA.htype = "com.fibaro.multilevelSwitch"
+  RoomZoneQA.htype = "com.fibaro.colorController"
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = 8000
+    self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
     
     -- Check room/zone dead status
     local statuses = {}
@@ -614,9 +742,9 @@ function defClasses()
     
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
-      local d = ROUND(b._props.dimming.get(b.rsrc))
+      local d = b._props.dimming and ROUND(b._props.dimming.get(b.rsrc)) or 0
       self:updateProperty("state",value)
-      self:updateProperty("value",d)
+      self:updateProperty("value",value and d or 0)
     end)
     
     self.dev:subscribe("dimming",function(key,value,b)
@@ -624,7 +752,22 @@ function defClasses()
       self:updateProperty("value",ROUND(value))
     end)
     
+    self.dev:subscribe("color",function(key,value,b)
+      if not value or not value.x then return end
+      local r,g,b0 = HUE:xyToRgb(value.x,value.y,100)
+      self:print("color xy %s,%s,%s",r,g,b0)
+      self:updateProperty("color",string.format("%02X%02X%02X",r,g,b0))
+      self:updateProperty("colorComponents",{red=r,green=g,blue=b0,warmWhite=0})
+    end)
+    
+    self.dev:subscribe("color_temperature",function(key,value,b)
+      if not value then return end
+      self:print("color_temperature %s",value)
+      self:updateProperty("colorTemperature",value)
+    end)
+    
     self.dev:publishAll()
+    loadScenesForRoom(self)
   end
   
   -- Stores a Hue scene name in the QA variable 'scene' for use by turnOn().
@@ -637,26 +780,21 @@ function defClasses()
     self:updateProperty("value", 100)
     self:updateProperty("state", true)
     local sceneName = type(sceneArg)=='string' and sceneArg or self:getVar("scene")
-    
     local scene = HUE:getSceneByName(sceneName,self.dev.name)
     if sceneName and not scene then self:print("Scene %s not found",sceneName) end
     if not scene then
-      self.dev:targetCmd({on = {on=true}})
+      self.group:turnOn()
     else
       self:print("Turn on Scene %s",scene.name)
       scene:recall()
     end
-  end
-  -- Sends a dynamic effect command to the group (brightness parameter).
-  function RoomZoneQA:setEffect(effect)
-    self.dev:targetCmd({effect_v2 = {brightness=effect}})
   end
   -- Turns the entire group off.
   function RoomZoneQA:turnOff()
     self:print("Turn off")
     self:updateProperty("value", 0)
     self:updateProperty("state", false)
-    self.dev:targetCmd({on = {on=false}})
+    self.group:turnOff()
   end
   -- Sets group brightness (0-100).
   function RoomZoneQA:setValue(value)
@@ -664,27 +802,61 @@ function defClasses()
     value = tonumber(value)
     self:print("setValue")
     self:updateProperty("value", value)
-    self.dev:targetCmd({dimming = {brightness=value}})
+    self.group:setDim(value)
   end
   -- Starts a smooth ramp up to 100% over self.dimdelay ms (default 8 s).
   function RoomZoneQA:startLevelIncrease()
     self:print("startLevelIncrease")
     local val = self.properties.value
     val = ROUND((100-val)/100.0*self.dimdelay)
-    --self:print("LI %s %s",self.properties.value,val)
-    self.dev:targetCmd({dimming = {brightness=100}, dynamics ={duration=val}})
+    self.group:setDim(100,val)
   end
-  -- Starts a smooth ramp down to 0% over self.dimdelay ms (default 8 s).
   function RoomZoneQA:startLevelDecrease()
     self:print("startLevelDecrease")
     local val = self.properties.value
     val = ROUND((val-0)/100.0*self.dimdelay)
-    --self:print("LD %s %s",self.properties.value,val)
-    self.dev:targetCmd({dimming = {brightness=0}, dynamics ={duration=val}})
+    self.group:setDim(0,val)
   end
-  -- Stops any ongoing level ramp immediately.
   function RoomZoneQA:stopLevelChange()
-    self.dev:targetCmd({dimming_delta = {action='stop'}})
+    self.group:setDim(-1)
+  end
+  -- Sets color temperature in mirek.
+  function RoomZoneQA:setColorTemperature(value)
+    if type(value)=='table' then value = value.values[1] end
+    self.group:setTemperature(tonumber(value))
+  end
+  -- Sets color from RRGGBB hex string.
+  function RoomZoneQA:setColor(value)
+    if type(value)=='table' then value = value.values[1] end
+    local r = tonumber(value:sub(1,2),16)
+    local g = tonumber(value:sub(3,4),16)
+    local b = tonumber(value:sub(5,6),16)
+    self:print("setColor %s,%s,%s",r,g,b)
+    local x,y = HUE:rgbToXy(r,g,b)
+    self.group:rawCmd({color={xy={x=x,y=y}}})
+    self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+    self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
+  end
+  -- Sets color from a colorComponents table {red,green,blue,warmWhite}.
+  function RoomZoneQA:setColorComponents(value)
+    if type(value)=='table' and value.values then value = value.values[1] end
+    local cur = self.properties.colorComponents or {red=0,green=0,blue=0,warmWhite=0}
+    local r = tonumber(value.red)       or cur.red       or 0
+    local g = tonumber(value.green)     or cur.green     or 0
+    local b = tonumber(value.blue)      or cur.blue      or 0
+    local w = tonumber(value.warmWhite) or cur.warmWhite or 0
+    self:print("setColorComponents r=%s g=%s b=%s w=%s",r,g,b,w)
+    local hasRGB = value.red ~= nil or value.green ~= nil or value.blue ~= nil
+    if hasRGB then
+      local x,y = HUE:rgbToXy(r,g,b)
+      self.group:rawCmd({color={xy={x=x,y=y}}})
+      self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+    elseif value.warmWhite ~= nil then
+      local mirek = math.floor(153 + (w/255)*(454-153))
+      self.group:rawCmd({color_temperature={mirek=mirek}})
+      self:updateProperty("colorTemperature",mirek)
+    end
+    self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=w})
   end
   -- Reads a QA variable from this child device by name. Returns nil if not found.
   function RoomZoneQA:getVar(name)
@@ -697,6 +869,12 @@ function defClasses()
   function RoomZoneQA.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
     table.insert(rsrc.interfaces,"levelChange")
+    table.insert(rsrc.interfaces,"ringColor")
+    table.insert(rsrc.interfaces,"colorTemperature")
+    rsrc.properties = rsrc.properties or {}
+    rsrc.properties.colorComponents = {red=0,green=0,blue=0,warmWhite=0}
+    rsrc.UI = rsrc.UI or {}
+    table.insert(rsrc.UI, {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}})
   end
   
 end

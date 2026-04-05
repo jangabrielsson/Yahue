@@ -97,15 +97,13 @@ local function PSET(path,tab,val)
 end
 
 local function keyMerge(t1,t2)
-  local res = copy(t1)
   for k,v in pairs(t2) do if t1[k]==nil then t1[k]=v end end
-  return res
+  return t1
 end
 
 local _initEngine
 local function main()
   local v2 = "1948086000"
-  local OPTIMISTIC = false
   local err_retry = 3
   local post = fibaro.post
   local resources = {}
@@ -115,6 +113,9 @@ local function main()
   local fmt = string.format
   local merge = keyMerge
   local classes = {}
+  ---------------------------------------------------------------------------
+  -- RESOURCE REGISTRY
+  ---------------------------------------------------------------------------
   local function createResourceTable()
     local self = { resources={}, id2resource={} }
     local resources,id2resource = self.resources,self.id2resource
@@ -137,7 +138,7 @@ local function main()
     end
     function self.modify(id,rsrc)
       assert(id2resource[id],"No resource for modify")
-      id2resource[id]:modify(rsrc)
+      id2resource[id]:modified(rsrc)
     end
     function self.delete(id)
       local rsrc=id2resource[id]
@@ -164,6 +165,9 @@ local function main()
     return cl
   end
   
+  ---------------------------------------------------------------------------
+  -- RESOURCE CLASS DEFINITIONS
+  ---------------------------------------------------------------------------
   local hueResource = classs('hueResource')
   function hueResource:__init(rsrc) self:setup(rsrc) end
   
@@ -184,7 +188,7 @@ local function main()
     self._inheritedFuns = {}
     self.path = "/clip/v2/resource/"..self.type.."/"..self.id
     self._inited = true
-    self.listernes = {}
+    self.listeners = {}
     self._props = props[self.type]
     self._meths = meths[self.type]
     DEBUG("class","Setup %s '%s' %s",self.id,self.type,self.name or "rsrc")
@@ -266,7 +270,7 @@ local function main()
     if self._postEvent then self:_postEvent(self.id) end
   end
   function hueResource:publish(key,value)
-    local ll = self.listernes[key] or {}
+    local ll = self.listeners[key] or {}
     if next(ll) then
       for l,_ in pairs(ll) do
         l(key,value,self)
@@ -278,15 +282,15 @@ local function main()
     if self.services then
       for _,s in ipairs(self.services or {}) do resolve(s):subscribe(key,fun) end
     elseif self._props and self._props[key] then
-      self.listernes[key] = self.listernes[key] or {}
-      self.listernes[key][fun]=true
+      self.listeners[key] = self.listeners[key] or {}
+      self.listeners[key][fun]=true
     end
   end
   function hueResource:unsubscribe(key,fun)
     for _,s in ipairs(self.services or {}) do resolve(s):unsubscribe(key,fun) end
-    if self.listernes[key] then
-      if fun==true then self.listernes[key]={}
-      else self.listernes[key][fun]=nil end
+    if self.listeners[key] then
+      if fun==true then self.listeners[key]={}
+      else self.listeners[key][fun]=nil end
     end
   end
   function hueResource:sendCmd(cmd) return huePUT(self.path,cmd) end
@@ -333,8 +337,8 @@ local function main()
     pruneLights(self)
     self._str = fmt("[light:%s,%s,%s]",self.id,self:getName("LGHT"),self.resourceType)
   end
-  function light:turnOn(transition) self:sendCmd({on={on=true},dynamics=transition and {duration=transition} or nil}) if OPTIMISTIC then self.rsrc.on.on = true end end
-  function light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) if OPTIMISTIC then self.rsrc.on.on = true end end
+  function light:turnOn(transition) self:sendCmd({on={on=true},dynamics=transition and {duration=transition} or nil}) end
+  function light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) end
   function light:setDim(val,transition)
     if val == -1 then
       self:sendCmd({dimming_delta={action='stop'}})
@@ -356,11 +360,35 @@ local function main()
   function light:toggle(transition)
     local on = self.rsrc.on.on
     self:sendCmd({on={on=not on},dynamics=transition and {duration=transition} or nil})
-    if OPTIMISTIC then self.rsrc.on.on = not on end
   end
   function light:rawCmd(cmd) self:sendCmd(cmd) end
   function light:setTemperature(t,transition) self:sendCmd({color_temperature={mirek=math.floor(t+0.5)},dynamics=transition and {duration=transition} or nil}) end
-  meths.light = { turnOn=true, turnOff=true, setDim=true, setColor=true, setTemperature=true, toggle=true, rawCmd=true }
+  function light:setEffect(effect)
+    local e = effect == 'stop' and 'no_effect' or effect
+    self:sendCmd({effects={effect=e}})
+  end
+  function light:setTimedEffect(effect, duration_ms)
+    local e = effect == 'stop' and 'no_effect' or effect
+    local cmd = {timed_effects={effect=e}}
+    if e ~= 'no_effect' and duration_ms then cmd.timed_effects.duration = duration_ms end
+    self:sendCmd(cmd)
+  end
+  function light:signal(sig, duration_ms, colors)
+    if sig == 'stop' then self:sendCmd({signaling={signal='no_signal'}}) return end
+    local cmd = { signaling = { signal=sig, duration=math.min(duration_ms or 5000, 65534000) } }
+    if colors then
+      cmd.signaling.colors = {}
+      for _,hex in ipairs(colors) do
+        local r = tonumber(hex:sub(1,2),16)/255
+        local g = tonumber(hex:sub(3,4),16)/255
+        local b = tonumber(hex:sub(5,6),16)/255
+        local x,y = HUE:rgbToXy(r*255,g*255,b*255)
+        cmd.signaling.colors[#cmd.signaling.colors+1] = {xy={x=x,y=y}}
+      end
+    end
+    self:sendCmd(cmd)
+  end
+  meths.light = { turnOn=true, turnOff=true, setDim=true, setColor=true, setTemperature=true, toggle=true, rawCmd=true, signal=true, setEffect=true, setTimedEffect=true }
   props.light = {
     on={get=function(r) return r.on.on end,set=function(r,v) r.on.on=v end, changed=function(o,n) return o.on.on ~= n.on.on, n.on.on end },
     dimming={
@@ -529,8 +557,8 @@ local function main()
     pruneLights(self)
   end
   function grouped_light:__tostring() return fmt("[grouped_light:%s,%s]",self.id,self:getName("GROUP")) end
-  function grouped_light:turnOn(transition) self:sendCmd({on={on=true},dynamics=transition and {duration=transition} or nil}) if OPTIMISTIC then self.rsrc.on.on = true end end
-  function grouped_light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) if OPTIMISTIC then self.rsrc.on.on = true end end
+  function grouped_light:turnOn(transition) self:sendCmd({on={on=true},dynamics=transition and {duration=transition} or nil}) end
+  function grouped_light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) end
   function grouped_light:setDim(val,transition)
     if val == -1 then
       self:sendCmd({dimming_delta={action='stop'}})
@@ -552,10 +580,24 @@ local function main()
   function grouped_light:toggle(transition)
     local on = self.rsrc.on.on
     self:sendCmd({on={on=not on},dynamics=transition and {duration=transition} or nil})
-    if OPTIMISTIC then self.rsrc.on.on = not on end
   end
   function grouped_light:rawCmd(cmd) self:sendCmd(cmd) end
   function grouped_light:setTemperature(t,transition) self:sendCmd({color_temperature={mirek=math.floor(t+0.5)},dynamics=transition and {duration=transition} or nil}) end
+  function grouped_light:signal(sig, duration_ms, colors)
+    if sig == 'stop' then self:sendCmd({signaling={signal='no_signal'}}) return end
+    local cmd = { signaling = { signal=sig, duration=math.min(duration_ms or 5000, 65534000) } }
+    if colors then
+      cmd.signaling.colors = {}
+      for _,hex in ipairs(colors) do
+        local r = tonumber(hex:sub(1,2),16)/255
+        local g = tonumber(hex:sub(3,4),16)/255
+        local b = tonumber(hex:sub(5,6),16)/255
+        local x,y = HUE:rgbToXy(r*255,g*255,b*255)
+        cmd.signaling.colors[#cmd.signaling.colors+1] = {xy={x=x,y=y}}
+      end
+    end
+    self:sendCmd(cmd)
+  end
   
   meths.scene = { recall=true, targetCmd=true }
   local scene = classs('scene',hueResource)
@@ -726,6 +768,9 @@ local function main()
     self._str = fmt("[geofence_client:%s]",self.id)
   end
   
+  ---------------------------------------------------------------------------
+  -- SSE EVENT POLLING
+  ---------------------------------------------------------------------------
   local fetchEvents
   local function handle_events(data)
     for _,e1 in ipairs(data) do
@@ -810,6 +855,9 @@ local function main()
   if fibaro.plua then fetchEvents = fetchEvents_emu
   else fetchEvents = fetchEvents_hc3 end
   
+  ---------------------------------------------------------------------------
+  -- HTTP TRANSPORT
+  ---------------------------------------------------------------------------
   function hueGET(api,event)
     local u = url..api
     net.HTTPClient():request(u,{
@@ -843,7 +891,10 @@ local function main()
         headers={ ['hue-application-key'] = app_key }
       },
       success = function(resp)
-        local b = resp
+        local body = resp.data and json.decode(resp.data)
+        if body and body.errors and #body.errors > 0 then
+          ERROR("hue PUT error, %s - %s",path,json.encode(body.errors))
+        end
       end,
       error = function(err,f,g)
         ERROR("hue call, %s %s - %s",path,json.encode(data),err)
@@ -908,7 +959,8 @@ local function main()
   --]]
   
   ---------------------------------------------------------------------------
-  
+  -- STARTUP STATE MACHINE
+  ---------------------------------------------------------------------------
   fibaro.event({type='STARTUP'},function(_) hueGET("/api/config",'HUB_VERSION') end)
   
   fibaro.event({type='HUB_VERSION'},function(ev)
@@ -952,6 +1004,9 @@ local function main()
     if callBack then cb,callBack=callBack,nil setTimeout(cb,0) end
   end)
   
+  ---------------------------------------------------------------------------
+  -- HUE PUBLIC API
+  ---------------------------------------------------------------------------
   function HUE:getResources() return resources.resources end
   function HUE:getResourceIds() return resources.id2resource end
   function HUE:getResource(id) return resources.id2resource[id] end
@@ -1113,7 +1168,14 @@ local function main()
     url =  fmt("https://%s",ip)
     DEBUG('info',"HUEv2Engine v%s",_version_e)
     DEBUG('info',"Hub url: %s",url)
-    callBack = function() fetchEvents() if cb then cb() end end
+    callBack = function()
+      fetchEvents()
+      setInterval(function()
+        DEBUG('info',"Health-check: refreshing Hue resources")
+        post({type='REFRESH_RESOURCES'})
+      end, 30*60*1000)
+      if cb then cb() end
+    end
     post({type='STARTUP'})
   end
   

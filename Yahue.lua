@@ -6,11 +6,12 @@
 --%%var:Hue_User=config.Hue_user
 --%%file:engine.lua,Engine
 --%%file:$fibaro.lib.qwikchild,qwickchild
+--%%file:userconfig.lua,UserConfig
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
 --%%u:{label='info', text=''}
 --%%u:{multi='devSelect', text='Devices', values={}, options={}, onToggled='devSelChanged'}
---%%u:{button='restart', text='Restart', onReleased='restart'}
+--%%u:{{button='pairHue', text='Pair with bridge', onReleased='pairHue'},{button='restart', text='Restart', onReleased='restart'}}
 --%%u:{{button='dump', text='Dump', onReleased='dumpResources'},{button='applyDevices', text='Apply selection', onReleased='applyDevices'}}
 
 -- %%desktop:true
@@ -49,8 +50,14 @@ local function init()
   local ip,key = self:getVariable("Hue_IP"),self:getVariable("Hue_User")
   ip = ip:match("(%d+.%d+.%d+.%d+)")
   key = key:match("(.+)")
-  assert(ip,"Missing Hue_IP - hub IP address")
-  assert(key,"Missing Hue_User - Hue hub key")
+  if not ip then
+    self:updateView("info","text","Set Hue_IP variable then restart")
+    return
+  end
+  if not key then
+    self:updateView("info","text","Set Hue_User, or press 'Pair with bridge'")
+    return
+  end
 
   HUE:init(ip,key,function()
     HUE:app()
@@ -67,6 +74,10 @@ function QuickApp:onInit()
     update()
   elseif HUE then init() 
   else self:error("Missing HUE library, set QV update=yes") end
+  -- setTimeout(function() -- test signal
+  --   print("Start signal for 5sec")
+  --   fibaro.call(4222, "signal", "alternating", 30000, {"FF0000","0000FF"}) 
+  -- end,5000)
 end
 
 function QuickApp:restart() plugin.restart() end
@@ -81,67 +92,77 @@ function QuickApp:applyDevices()
   HUE:applySelection(self.hueSelection or {})
 end
 
-function update()
-  local baseURL = "https://raw.githubusercontent.com/jangabrielsson/Yahue/master/"
-  local files = {
-    {url=baseURL.."engine.lua",  name="Engine"},
-    {url=baseURL.."devices.lua", name="App"},
-    {url=baseURL.."utils.lua",   name="Utils"},
-  }
-  local fetched = {}
-  local function getFile(url,cont)
-    quickApp:debug("Fetching "..url)
-    net.HTTPClient():request(url,{
-      options = {method='GET', checkCertificate=false, timeout=20000},
-      success = function(resp) cont(resp.data) end,
-      error = function(err) fibaro.error(__TAG,"Fetching "..err) end
+function QuickApp:pairHue()
+  local ip = self:getVariable("Hue_IP")
+  ip = ip:match("(%d+.%d+.%d+.%d+)")
+  if not ip then
+    self:updateView("info","text","Set Hue_IP first, then press Pair")
+    return
+  end
+  self:updateView("info","text","Press the button on your Hue bridge now…")
+  local url = "http://"..ip.."/api"
+  local body = json.encode({devicetype="yahue#hc3"})
+  local tries = 0
+  local maxTries = 15
+  local function poll()
+    tries = tries + 1
+    net.HTTPClient():request(url, {
+      options = { method='POST', headers={['Content-Type']='application/json'}, data=body,
+                  checkCertificate=false, timeout=5000 },
+      success = function(resp)
+        local result = json.decode(resp.data)
+        if result and result[1] and result[1].success and result[1].success.username then
+          local key = result[1].success.username
+          self:setVariable("Hue_User", key)
+          self:updateView("info","text","Paired! Restarting\xe2\x80\xa6")
+          setTimeout(function() plugin.restart() end, 3000)
+        elseif tries < maxTries then
+          setTimeout(poll, 2000)
+        else
+          self:updateView("info","text","Timed out — press Pair and try again")
+        end
+      end,
+      error = function(err)
+        self:updateView("info","text","Pair error: "..tostring(err))
+      end
     })
   end
-  local function fetchNext(i)
-    if i > #files then
-      quickApp:setVariable("update",os.date("%Y-%m-%d %H:%M:%S"))
-      local batch = {}
-      for _,f in ipairs(fetched) do
-        batch[#batch+1] = {name=f.name, isMain=false, isOpen=false, content=f.content}
-      end
-      api.put("/quickApp/"..quickApp.id.."/files",batch)
-      setTimeout(init,0)
-      return
-    end
-    getFile(files[i].url,function(data)
-      fetched[#fetched+1] = {name=files[i].name, content=data}
-      fetchNext(i+1)
-    end)
-  end
-  fetchNext(1)
+  poll()
 end
 
--- local var,cid,n = "RPC"..plugin.mainDeviceId,plugin.mainDeviceId,0
--- local vinit,path = { name=var, value=""},"/plugins/"..cid.."/variables/"..var
+function update()
+  local baseURL = "https://raw.githubusercontent.com/jangabrielsson/Yahue/master/"
+  quickApp:debug("Fetching dist/Yahue.fqa...")
+  net.HTTPClient():request(baseURL.."dist/Yahue.fqa", {
+    options = { method='GET', checkCertificate=false, timeout=30000 },
+    success = function(resp)
+      local fqa = json.decode(resp.data)
+      if not fqa or not fqa.files then
+        quickApp:error("Failed to parse Yahue.fqa")
+        return
+      end
+      -- Check which files already exist in this QA
+      local existing = {}
+      local currentFiles = api.get("/quickApp/"..quickApp.id.."/files") or {}
+      for _,f in ipairs(currentFiles) do existing[f.name] = true end
 
--- api.post("/plugins/"..cid.."/variables",{ name=var, value=""}) -- create var if not exist
--- function fibaro._rpc(id,fun,args,timeout,qaf)
---   n = n + 1
---   api.put(path,vinit)
---   fibaro.call(id,"RPC_CALL",path,var,n,fun,args,qaf)
---   timeout = os.time()+(timeout or 3)
---   while os.time() < timeout do
---     local r,_ = api.get(path)
---     if r and r.value~="" then
---       r = r.value 
---       if r[1] == n then
---         if not r[2] then error(r[3],3) else return select(3,table.unpack(r)) end
---       end
---     end 
---   end
---   error(string.format("RPC timeout %s:%d",fun,id),3)
--- end
+      -- Build batch: include all files from the .fqa except UserConfig if it already exists
+      local batch = {}
+      for _,f in ipairs(fqa.files) do
+        if f.name == "UserConfig" and existing["UserConfig"] then
+          quickApp:debug("Skipping UserConfig (preserving user customisations)")
+        else
+          batch[#batch+1] = { name=f.name, isMain=f.isMain or false, isOpen=false, content=f.content }
+        end
+      end
 
--- function fibaro.rpc(id,name,timeout) return function(...) return fibaro._rpc(id,name,{...},timeout) end end
-
--- function QuickApp:RPC_CALL(path2,var2,n2,fun,args,qaf)
---   local res
---   if qaf then res = {n2,pcall(self[fun],self,table.unpack(args))}
---   else res = {n2,pcall(_G[fun],table.unpack(args))} end
---   api.put(path2,{name=var2, value=res}) 
--- end
+      quickApp:setVariable("update", os.date("%Y-%m-%d %H:%M:%S"))
+      api.put("/quickApp/"..quickApp.id.."/files", batch)
+      quickApp:debug("Update complete — restarting")
+      setTimeout(init, 0)
+    end,
+    error = function(err)
+      quickApp:error("Fetching dist/Yahue.fqa: "..tostring(err))
+    end
+  })
+end
