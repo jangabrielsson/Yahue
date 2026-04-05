@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.0.70] - 2026-04-05
+
+## Changes in v0.0.70
+
+- ✨ **Feature**: Add release notes for v0.0.69 and update project configuration
+  - Created HTML release notes for Yahue v0.0.69, including features, download links, and documentation.
+  - Updated project configuration to change the version file reference from "HueV2App.lua" to "devices.lua".
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.69] - 2026-04-05
 
 ## Changes in v0.0.69
