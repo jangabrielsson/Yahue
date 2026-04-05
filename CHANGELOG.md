@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.71] - 2026-04-05
+
+## Changes in v0.0.71
+
+- ✨ **Feature**: Add HTML release notes for Yahue v0.0.70 with download links and documentation
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.70] - 2026-04-05
 
 ## Changes in v0.0.70
