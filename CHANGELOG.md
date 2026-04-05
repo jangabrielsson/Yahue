@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.72] - 2026-04-05
+
+## Changes in v0.0.72
+
+- No new commits since last release
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.71] - 2026-04-05
 
 ## Changes in v0.0.71
