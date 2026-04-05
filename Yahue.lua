@@ -41,8 +41,20 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE,update
 
+local function isEngineReady(engine)
+  return type(engine) == "table"
+    and type(engine.init) == "function"
+    and type(engine.app) == "function"
+    and type(engine.appName) == "string"
+    and type(engine.appVersion) == "string"
+end
+
 local function init()
   local self = quickApp
+  if not isEngineReady(HUE) then
+    self:updateView("info","text","Missing engine files — select a release to restore")
+    return
+  end
   self:debug(HUE.appName,HUE.appVersion)
   self:updateView("info","text",HUE.appName.." v"..HUE.appVersion)
 
@@ -75,7 +87,7 @@ function QuickApp:onInit()
     self:debug("Updating HueV2App")
     self:setVariable("update","_")
     update()
-  elseif HUE then 
+  elseif isEngineReady(HUE) then 
     init()
   else 
     self:updateView("info","text","Missing engine files — select a release to restore")
@@ -89,13 +101,13 @@ end
 
 function QuickApp:restart() plugin.restart() end
 function QuickApp:dumpResources()
-  if HUE then HUE:listAllDevicesGrouped() end
+  if isEngineReady(HUE) and HUE.listAllDevicesGrouped then HUE:listAllDevicesGrouped() end
 end
 function QuickApp:devSelChanged(event)
   self.hueSelection = event.values[1]
 end
 function QuickApp:applyDevices()
-  if not HUE then self:error("HUE not ready") return end
+  if not isEngineReady(HUE) then self:error("HUE not ready") return end
   HUE:applySelection(self.hueSelection or {})
 end
 
