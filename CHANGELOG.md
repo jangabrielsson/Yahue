@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.76] - 2026-04-05
+
+## Changes in v0.0.76
+
+- ✨ **Feature**: Remove obsolete workflows and add release notes for v0.0.75 with forum post helper
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.75] - 2026-04-05
 
 ## Changes in v0.0.75
