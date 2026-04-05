@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.73] - 2026-04-05
+
+## Changes in v0.0.73
+
+- ✨ **Feature**: Add engine readiness check and update error handling in Yahue.lua chore: create HTML release notes for Yahue v0.0.72
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.72] - 2026-04-05
 
 ## Changes in v0.0.72
