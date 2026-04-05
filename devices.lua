@@ -460,10 +460,59 @@ function defClasses()
     HueClass.__init(self,device)
     self.div = 1
     self.value = 0
+    self.rotaryMode = (self:getVariable("rotaryMode") or "absolute"):lower()
+    self.rotaryStopMs = tonumber(self:getVariable("rotaryStopMs")) or 400
+    if self.rotaryStopMs < 100 then self.rotaryStopMs = 100 end
+    self.rotaryStopRef = nil
+    self.rotaryMoving = false
+    self.rotaryEventEnsured = {}
+    self.rotaryEventsReady = false
+
+    local function ensureRotaryEvents()
+      if self.rotaryEventsReady then return end
+      local suffix = tostring(self.id)
+      for _,prefix in ipairs({"left","right","stop"}) do
+        local eventName = prefix .. suffix
+        pcall(api.post, "/customEvents", { name = eventName, userDescription = "Yahue rotary event" })
+        self.rotaryEventEnsured[eventName] = true
+      end
+      self.rotaryEventsReady = true
+    end
+
+    if self.rotaryMode == "relative" or self.rotaryMode == "relativeevent" or self.rotaryMode == "event" then
+      ensureRotaryEvents()
+    end
+
+    local function emitRotaryEvent(prefix)
+      local eventName = prefix .. self.id
+      ensureRotaryEvents()
+      local ok = pcall(fibaro.emitCustomEvent, eventName)
+      if ok then return end
+      pcall(fibaro.emitCustomEvent, eventName)
+    end
+
+    local function armStopEvent()
+      if self.rotaryStopRef then clearTimeout(self.rotaryStopRef) end
+      self.rotaryMoving = true
+      self.rotaryStopRef = setTimeout(function()
+        self.rotaryStopRef = nil
+        if self.rotaryMoving then
+          self.rotaryMoving = false
+          emitRotaryEvent("stop")
+        end
+      end, self.rotaryStopMs)
+    end
+
     self.dev:subscribe("relative_rotary",function(key,v,b)
       if not v then return end
       local steps = math.max(ROUND(v.rotation.steps / self.div),1)
       local dir = (1 - (v.rotation.direction=='clock_wise' and 0 or 2))
+
+      if self.rotaryMode == "relative" or self.rotaryMode == "relativeevent" or self.rotaryMode == "event" then
+        emitRotaryEvent(dir > 0 and "right" or "left")
+        armStopEvent()
+      end
+
       self.value = self.value + steps*dir
       if self.value < 0 then self.value = 0 end
       if self.value > 100 then self.value = 100 end

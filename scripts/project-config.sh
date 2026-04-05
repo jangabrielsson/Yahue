@@ -26,9 +26,8 @@ VERSION_FILE=".version"
 
 # Source files that contain version declarations
 # Format: "path:pattern" where pattern is the sed search pattern
-# Example: "src/main.lua:local VERSION"
 declare -a VERSION_FILES=(
-    "HueV2App.lua:local VERSION"
+    "Yahue.lua:local VERSION"
 )
 
 # ============================================================================
@@ -42,18 +41,18 @@ DIST_DIR="dist"
 # Format: "source_file:output_file:build_command"
 # The build_command can use {SOURCE} and {OUTPUT} placeholders
 declare -a ARTIFACTS=(
-    "HueV2QA.lua:dist/Yahue.fqa:plua -t pack {SOURCE} {OUTPUT}"
+    "Yahue.lua:dist/Yahue.fqa:plua -t pack {SOURCE} {OUTPUT}"
 )
 
 # Files to include in git commits for releases
 declare -a RELEASE_FILES=(
     ".version"
     "CHANGELOG.md"
-    "HueV2App.lua"
-    "HueV2Engine.lua"
-    "HueV2File.lua"
-    "HueV2Map.lua"
-    "HueV2QA.lua"
+    "Yahue.lua"
+    "engine.lua"
+    "devices.lua"
+    "userconfig.lua"
+    "utils.lua"
     "dist/Yahue.fqa"
 )
 

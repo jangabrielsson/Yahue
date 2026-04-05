@@ -10,6 +10,7 @@
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
 --%%u:{label='info', text=''}
+--%%u:{select='releaseSelect', text='Recovery: Select release', value='', options={}, onToggled='installRelease'}
 --%%u:{multi='devSelect', text='Devices', values={}, options={}, onToggled='devSelChanged'}
 --%%u:{{button='pairHue', text='Pair with bridge', onReleased='pairHue'},{button='restart', text='Restart', onReleased='restart'}}
 --%%u:{{button='dump', text='Dump', onReleased='dumpResources'},{button='applyDevices', text='Apply selection', onReleased='applyDevices'}}
@@ -72,8 +73,12 @@ function QuickApp:onInit()
     self:debug("Updating HueV2App")
     self:setVariable("update","_")
     update()
-  elseif HUE then init() 
-  else self:error("Missing HUE library, set QV update=yes") end
+  elseif HUE then 
+    init()
+  else 
+    self:updateView("info","text","Missing engine files — select a release to restore")
+    fetchReleases()
+  end
   -- setTimeout(function() -- test signal
   --   print("Start signal for 5sec")
   --   fibaro.call(4222, "signal", "alternating", 30000, {"FF0000","0000FF"}) 
@@ -128,6 +133,114 @@ function QuickApp:pairHue()
     })
   end
   poll()
+end
+
+function fetchReleases()
+  local self = quickApp
+  local repoURL = "https://api.github.com/repos/jangabrielsson/Yahue/releases"
+  
+  net.HTTPClient():request(repoURL, {
+    options = { method='GET', checkCertificate=false, timeout=10000, headers={['Accept']='application/vnd.github.v3+json'} },
+    success = function(resp)
+      local ok, releases = pcall(json.decode, resp.data)
+      if not ok or not releases then
+        self:error("Failed to parse releases")
+        return
+      end
+      
+      local options = {{type='option', text='-- Choose version --', value=''}}
+      for _, rel in ipairs(releases) do
+        if rel.tag_name and rel.assets then
+          options[#options+1] = {type='option', text=rel.tag_name, value=rel.tag_name}
+        end
+      end
+      self:updateView("releaseSelect", "options", options)
+      self:debug("Loaded "..#releases.." releases")
+    end,
+    error = function(err)
+      self:error("Fetching releases: "..tostring(err))
+    end
+  })
+end
+
+function QuickApp:installRelease(event)
+  local tag = event.values[1] or (type(event) == 'string' and event) or ''
+  if tag == '' or tag == nil then return end
+  
+  self:updateView("releaseSelect", "value", '')  -- Reset dropdown
+  self:updateView("info", "text", "Downloading release "..tag.."...")
+  
+  local releasesURL = "https://api.github.com/repos/jangabrielsson/Yahue/releases/tags/"..tag
+  
+  net.HTTPClient():request(releasesURL, {
+    options = { method='GET', checkCertificate=false, timeout=10000, headers={['Accept']='application/vnd.github.v3+json'} },
+    success = function(resp)
+      local ok, release = pcall(json.decode, resp.data)
+      if not ok or not release then
+        self:error("Failed to parse release")
+        return
+      end
+      
+      -- Find the .fqa asset
+      local fqaURL = nil
+      local assetName = nil
+      for _, asset in ipairs(release.assets or {}) do
+        if asset.name == "Yahue.fqa" then
+          fqaURL = asset.browser_download_url
+          assetName = asset.name
+          break
+        end
+      end
+      
+      if not fqaURL then
+        self:error("No Yahue.fqa found in release")
+        return
+      end
+      
+      self:updateView("info", "text", "Downloading "..assetName.."...")
+      
+      -- Download the .fqa file
+      net.HTTPClient():request(fqaURL, {
+        options = { method='GET', checkCertificate=false, timeout=30000 },
+        success = function(fqaResp)
+          local ok, decoded = pcall(json.decode, fqaResp.data)
+          local fqa = ok and decoded or nil
+          
+          if not fqa or not fqa.files then
+            self:error("Invalid .fqa format")
+            return
+          end
+          
+          self:updateView("info", "text", "Installing "..tag.."...")
+          
+          -- Build batch: preserve UserConfig if it exists
+          local existing = {}
+          local currentFiles = api.get("/quickApp/"..self.id.."/files") or {}
+          for _,f in ipairs(currentFiles) do existing[f.name] = true end
+          
+          local batch = {}
+          for _,f in ipairs(fqa.files) do
+            if f.name == "UserConfig" and existing["UserConfig"] then
+              self:debug("Preserving UserConfig")
+            else
+              batch[#batch+1] = { name=f.name, isMain=f.isMain or false, isOpen=false, content=f.content }
+            end
+          end
+          
+          -- Install files (auto-restarts)
+          self:setVariable("update", os.date("%Y-%m-%d %H:%M:%S").." from "..tag)
+          api.put("/quickApp/"..self.id.."/files", batch)
+          self:debug("Update complete — restarting")
+        end,
+        error = function(err)
+          self:error("Downloading .fqa: "..tostring(err))
+        end
+      })
+    end,
+    error = function(err)
+      self:error("Fetching release: "..tostring(err))
+    end
+  })
 end
 
 function update()
