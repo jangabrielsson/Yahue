@@ -752,7 +752,7 @@ function defClasses()
       self:updateProperty("value",ROUND(value))
     end)
     
-    self.dev:subscribe("color",function(key,value,b)
+    self.dev:subscribe("color",function(key,value,_)
       if not value or not value.x then return end
       local r,g,b0 = HUE:xyToRgb(value.x,value.y,100)
       self:print("color xy %s,%s,%s",r,g,b0)
