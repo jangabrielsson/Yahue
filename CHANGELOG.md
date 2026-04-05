@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.0.75] - 2026-04-05
+
+## Changes in v0.0.75
+
+- ✨ **Feature**: Add release notes for v0.0.74 with forum post helper and download links
+- ✨ **Feature**: Remove UserConfig handling from file operations to preserve user customizations
+
+
+*Generated automatically from git commits*
+
 ## [v0.0.74] - 2026-04-05
 
 ## Changes in v0.0.74
