@@ -49,6 +49,16 @@ local function isEngineReady(engine)
     and type(engine.appVersion) == "string"
 end
 
+local function hasExistingUserConfig(currentFiles)
+  for _, f in ipairs(currentFiles or {}) do
+    if f.name == "UserConfig" then
+      local content = f.content
+      return type(content) == "string" and #content > 0
+    end
+  end
+  return false
+end
+
 local function init()
   local self = quickApp
   if not isEngineReady(HUE) then
@@ -237,14 +247,13 @@ function QuickApp:installRelease(event)
           
           self:updateView("info", "text", "Installing "..tag.."...")
           
-          -- Build batch: preserve UserConfig if it exists
-          local existing = {}
+          -- Build batch: preserve UserConfig only if an existing non-empty file is present.
           local currentFiles = api.get("/quickApp/"..self.id.."/files") or {}
-          for _,f in ipairs(currentFiles) do existing[f.name] = true end
+          local preserveUserConfig = hasExistingUserConfig(currentFiles)
           
           local batch = {}
           for _,f in ipairs(fqa.files) do
-            if f.name == "UserConfig" and existing["UserConfig"] then
+            if f.name == "UserConfig" and preserveUserConfig then
               self:debug("Preserving UserConfig")
             else
               batch[#batch+1] = { name=f.name, isMain=f.isMain or false, isOpen=false, content=f.content }
@@ -278,15 +287,14 @@ function update()
         quickApp:error("Failed to parse Yahue.fqa")
         return
       end
-      -- Check which files already exist in this QA
-      local existing = {}
+      -- Preserve UserConfig only if an existing non-empty file is present.
       local currentFiles = api.get("/quickApp/"..quickApp.id.."/files") or {}
-      for _,f in ipairs(currentFiles) do existing[f.name] = true end
+      local preserveUserConfig = hasExistingUserConfig(currentFiles)
 
       -- Build batch: include all files from the .fqa except UserConfig if it already exists
       local batch = {}
       for _,f in ipairs(fqa.files) do
-        if f.name == "UserConfig" and existing["UserConfig"] then
+        if f.name == "UserConfig" and preserveUserConfig then
           quickApp:debug("Skipping UserConfig (preserving user customisations)")
         else
           batch[#batch+1] = { name=f.name, isMain=f.isMain or false, isOpen=false, content=f.content }
