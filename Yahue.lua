@@ -4,6 +4,7 @@
 --%%save:dist/Yahue.fqa
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
+--%%conceal:Hue_User="<Hue app key>"
 --%%file:engine.lua,Engine
 --%%file:$fibaro.lib.qwikchild,qwickchild
 --%%file:devices.lua,App
