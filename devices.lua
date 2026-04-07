@@ -557,7 +557,7 @@ function defClasses()
     self.light:turnOff()
   end
   function DimLight:setValue(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
     self.light:setDim(value)
@@ -603,13 +603,13 @@ function defClasses()
     self.light:turnOff()
   end
   function TempLight:setValue(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
     self.light:setDim(value)
   end
   function TempLight:setColorTemperature(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     self.light:setTemperature(tonumber(value))
   end
   function TempLight.annotate(rsrc)
@@ -664,7 +664,7 @@ function defClasses()
     self.light:turnOff()
   end
   function ColorLight:setValue(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
     self.light:setDim(value)
@@ -685,7 +685,7 @@ function defClasses()
     self.light:setDim(-1)
   end
   function ColorLight:setColor(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     local r = tonumber(value:sub(1,2),16)
     local g = tonumber(value:sub(3,4),16)
     local b = tonumber(value:sub(5,6),16)
@@ -847,7 +847,7 @@ function defClasses()
   end
   -- Sets group brightness (0-100).
   function RoomZoneQA:setValue(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:print("setValue")
     self:updateProperty("value", value)
@@ -871,12 +871,12 @@ function defClasses()
   end
   -- Sets color temperature in mirek.
   function RoomZoneQA:setColorTemperature(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     self.group:setTemperature(tonumber(value))
   end
   -- Sets color from RRGGBB hex string.
   function RoomZoneQA:setColor(value)
-    if type(value)=='table' then value = value.values[1] end
+    if type(value)=='table' and value.values then value = value.values[1] end
     local r = tonumber(value:sub(1,2),16)
     local g = tonumber(value:sub(3,4),16)
     local b = tonumber(value:sub(5,6),16)
