@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.1] - 2026-04-07
+
+## Changes in v0.2.1
+
+- ✨ **Feature**: Add color support checks for group resources in defClasses function
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.0] - 2026-04-06
 
 ## Changes in v0.2.0
