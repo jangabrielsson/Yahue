@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.2] - 2026-04-07
+
+## Changes in v0.2.2
+
+- ✨ **Feature**: Fix: add checks for color support in defClasses function to handle table values
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.1] - 2026-04-07
 
 ## Changes in v0.2.1
