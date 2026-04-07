@@ -881,6 +881,10 @@ function defClasses()
     local g = tonumber(value:sub(3,4),16)
     local b = tonumber(value:sub(5,6),16)
     self:print("setColor %s,%s,%s",r,g,b)
+    if not (self.group.rsrc and self.group.rsrc.color) then
+      self:print("setColor ignored – group does not support color (CT-only lights)")
+      return
+    end
     local x,y = HUE:rgbToXy(r,g,b)
     self.group:rawCmd({color={xy={x=x,y=y}}})
     self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
@@ -896,7 +900,7 @@ function defClasses()
     local w = tonumber(value.warmWhite) or cur.warmWhite or 0
     self:print("setColorComponents r=%s g=%s b=%s w=%s",r,g,b,w)
     local hasRGB = value.red ~= nil or value.green ~= nil or value.blue ~= nil
-    if hasRGB then
+    if hasRGB and (self.group.rsrc and self.group.rsrc.color) then
       local x,y = HUE:rgbToXy(r,g,b)
       self.group:rawCmd({color={xy={x=x,y=y}}})
       self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
