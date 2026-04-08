@@ -179,6 +179,15 @@ function defClasses()
   -- Override in subclasses to send raw Hue API commands.
   function HueClass:hueCommand(tab)
   end
+  -- Returns the value of a QuickApp variable by name, or "" if not found.
+  -- Does NOT log a warning for missing variables (unlike the built-in getVariable).
+  function HueClass:getVariable(name)
+    local qvars = self.properties.quickAppVariables or {}
+    for _,v in ipairs(qvars) do
+      if v.name == name then return v.value end
+    end
+    return ""
+  end
   -- Prints a debug line tagged with this child's name instead of the QA name.
   function HueClass:print(fmt,...)
     local TAG = __TAG; __TAG = self.pname
@@ -534,6 +543,8 @@ function defClasses()
   DimLight.htype = "com.fibaro.multilevelSwitch"
   function DimLight:__init(device)
     HueClass.__init(self,device)
+    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+    self.transition = tonumber(self:getVariable("transition")) or 0
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
@@ -549,18 +560,33 @@ function defClasses()
   end
   function DimLight:turnOn()
     self:updateProperty("state",true)
-    self.light:turnOn()
+    self.light:turnOn(self.transition)
   end
   function DimLight:turnOff()
     self:updateProperty("state",false)
     self:updateProperty("value",0)
-    self.light:turnOff()
+    self.light:turnOff(self.transition)
   end
   function DimLight:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
-    self.light:setDim(value)
+    self.light:setDim(value, self.transition)
+  end
+  function DimLight:startLevelIncrease()
+    self:print("startLevelIncrease")
+    local val = self.properties.value
+    val = ROUND((100-val)/100.0*self.dimdelay)
+    self.light:setDim(100,val)
+  end
+  function DimLight:startLevelDecrease()
+    self:print("startLevelDecrease")
+    local val = self.properties.value
+    val = ROUND((val-0)/100.0*self.dimdelay)
+    self.light:setDim(0,val)
+  end
+  function DimLight:stopLevelChange()
+    self.light:setDim(-1)
   end
   function DimLight.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
@@ -576,6 +602,8 @@ function defClasses()
   TempLight.htype = "com.fibaro.colorController"
   function TempLight:__init(device)
     HueClass.__init(self,device)
+    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+    self.transition = tonumber(self:getVariable("transition")) or 0
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
@@ -595,18 +623,33 @@ function defClasses()
   end
   function TempLight:turnOn()
     self:updateProperty("state",true)
-    self.light:turnOn()
+    self.light:turnOn(self.transition)
   end
   function TempLight:turnOff()
     self:updateProperty("state",false)
     self:updateProperty("value",0)
-    self.light:turnOff()
+    self.light:turnOff(self.transition)
   end
   function TempLight:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
-    self.light:setDim(value)
+    self.light:setDim(value, self.transition)
+  end
+  function TempLight:startLevelIncrease()
+    self:print("startLevelIncrease")
+    local val = self.properties.value
+    val = ROUND((100-val)/100.0*self.dimdelay)
+    self.light:setDim(100,val)
+  end
+  function TempLight:startLevelDecrease()
+    self:print("startLevelDecrease")
+    local val = self.properties.value
+    val = ROUND((val-0)/100.0*self.dimdelay)
+    self.light:setDim(0,val)
+  end
+  function TempLight:stopLevelChange()
+    self.light:setDim(-1)
   end
   function TempLight:setColorTemperature(value)
     if type(value)=='table' and value.values then value = value.values[1] end
@@ -628,6 +671,7 @@ function defClasses()
   function ColorLight:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+    self.transition = tonumber(self:getVariable("transition")) or 0
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
@@ -655,19 +699,19 @@ function defClasses()
   end
   function ColorLight:turnOn()
     self:updateProperty("state",true)
-    self.light:turnOn()
+    self.light:turnOn(self.transition)
   end
   function ColorLight:turnOff()
     self:print("Turn off")
     self:updateProperty("value",0)
     self:updateProperty("state",false)
-    self.light:turnOff()
+    self.light:turnOff(self.transition)
   end
   function ColorLight:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
-    self.light:setDim(value)
+    self.light:setDim(value, self.transition)
   end
   function ColorLight:startLevelIncrease()
     self:print("startLevelIncrease")
@@ -739,6 +783,7 @@ function defClasses()
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+    self.transition = tonumber(self:getVariable("transition")) or 0
     self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
     
     -- Check room/zone dead status
@@ -832,7 +877,7 @@ function defClasses()
     local scene = HUE:getSceneByName(sceneName,self.dev.name)
     if sceneName and not scene then self:print("Scene %s not found",sceneName) end
     if not scene then
-      self.group:turnOn()
+      self.group:turnOn(self.transition)
     else
       self:print("Turn on Scene %s",scene.name)
       scene:recall()
@@ -843,7 +888,7 @@ function defClasses()
     self:print("Turn off")
     self:updateProperty("value", 0)
     self:updateProperty("state", false)
-    self.group:turnOff()
+    self.group:turnOff(self.transition)
   end
   -- Sets group brightness (0-100).
   function RoomZoneQA:setValue(value)
@@ -851,7 +896,7 @@ function defClasses()
     value = tonumber(value)
     self:print("setValue")
     self:updateProperty("value", value)
-    self.group:setDim(value)
+    self.group:setDim(value, self.transition)
   end
   -- Starts a smooth ramp up to 100% over self.dimdelay ms (default 8 s).
   function RoomZoneQA:startLevelIncrease()
