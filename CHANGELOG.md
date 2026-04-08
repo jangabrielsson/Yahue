@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.3] - 2026-04-08
+
+## Changes in v0.2.3
+
+- ✨ **Feature**: add getVariable method and transition handling for light classes
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.2] - 2026-04-07
 
 ## Changes in v0.2.2
