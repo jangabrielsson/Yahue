@@ -548,18 +548,20 @@ function defClasses()
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
-      local d = b._props.dimming and ROUND(b._props.dimming.get(b.rsrc)) or 0
       self:updateProperty("state",value)
-      self:updateProperty("value",value and d or 0)
+      if value then self:updateProperty("value",self.lastVal or 100)
+      else self:updateProperty("value",0) end
     end)
     self.dev:subscribe("dimming",function(key,value,b)
       self:print("dimming %s",value)
-      self:updateProperty("value",ROUND(value))
+      self.lastVal = ROUND(value)
+      self:updateProperty("value",self.lastVal)
     end)
     self.dev:publishAll()
   end
   function DimLight:turnOn()
     self:updateProperty("state",true)
+    self:updateProperty("value",self.lastVal or 100)
     self.light:turnOn(self.transition)
   end
   function DimLight:turnOff()
@@ -608,11 +610,14 @@ function defClasses()
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
       self:updateProperty("state",value)
-      if not value then self:updateProperty("value",0) end
+      if not value then self:updateProperty("value",0) 
+      else self:updateProperty("value",self.lastVal or 100)
+      end
     end)
     self.dev:subscribe("dimming",function(key,value,b)
       self:print("dimming %s",value)
-      self:updateProperty("value",ROUND(value))
+      self.lastVal = ROUND(value)
+      self:updateProperty("value",self.lastVal)
       if value > 0 then self:updateProperty("state",true) end
     end)
     self.dev:subscribe("color_temperature",function(key,value,b)
@@ -623,6 +628,7 @@ function defClasses()
   end
   function TempLight:turnOn()
     self:updateProperty("state",true)
+    self:updateProperty("value",self.lastVal or 100)
     self.light:turnOn(self.transition)
   end
   function TempLight:turnOff()
@@ -676,11 +682,14 @@ function defClasses()
     self.dev:subscribe("on",function(key,value,b)
       self:print("on %s",value)
       self:updateProperty("state",value)
-      if not value then self:updateProperty("value",0) end
+      if not value then self:updateProperty("value",0) 
+      else self:updateProperty("value",self.lastVal or 100) 
+      end
     end)
     self.dev:subscribe("dimming",function(key,value,b)
       self:print("dimming %s",value)
-      self:updateProperty("value",ROUND(value))
+      self.lastVal = ROUND(value)
+      self:updateProperty("value",self.lastVal)
       if value > 0 then self:updateProperty("state",true) end
     end)
     self.dev:subscribe("color",function(key,value,b)
@@ -699,11 +708,12 @@ function defClasses()
   end
   function ColorLight:turnOn()
     self:updateProperty("state",true)
+    self:updateProperty("value",self.lastVal or 100)
     self.light:turnOn(self.transition)
   end
   function ColorLight:turnOff()
     self:print("Turn off")
-    self:updateProperty("value",0)
+    --self:updateProperty("value",0)
     self:updateProperty("state",false)
     self.light:turnOff(self.transition)
   end
@@ -728,15 +738,12 @@ function defClasses()
   function ColorLight:stopLevelChange()
     self.light:setDim(-1)
   end
-  function ColorLight:setColor(value)
-    if type(value)=='table' and value.values then value = value.values[1] end
-    local r = tonumber(value:sub(1,2),16)
-    local g = tonumber(value:sub(3,4),16)
-    local b = tonumber(value:sub(5,6),16)
+  function ColorLight:setColor(r,g,b,w)
+    local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) -- For logging purposes
     self:print("setColor %s,%s,%s",r,g,b)
     local x,y = HUE:rgbToXy(r,g,b)
     self.light:sendCmd({color={xy={x=x,y=y}}})
-    self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+    self:updateProperty("color",color)
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
   end
   function ColorLight:setColorComponents(value)
@@ -751,7 +758,8 @@ function defClasses()
     if hasRGB then
       local x,y = HUE:rgbToXy(r,g,b)
       self.light:sendCmd({color={xy={x=x,y=y}}})
-      self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+      local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
+      self:updateProperty("color",color)
     elseif value.warmWhite ~= nil then
       -- Map warmWhite 0-255 to mirek range 153 (6500K cool) to 454 (2200K warm)
       local mirek = math.floor(153 + (w/255)*(454-153))
@@ -920,11 +928,8 @@ function defClasses()
     self.group:setTemperature(tonumber(value))
   end
   -- Sets color from RRGGBB hex string.
-  function RoomZoneQA:setColor(value)
-    if type(value)=='table' and value.values then value = value.values[1] end
-    local r = tonumber(value:sub(1,2),16)
-    local g = tonumber(value:sub(3,4),16)
-    local b = tonumber(value:sub(5,6),16)
+  function RoomZoneQA:setColor(r,g,b,w)
+    local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
     self:print("setColor %s,%s,%s",r,g,b)
     if not (self.group.rsrc and self.group.rsrc.color) then
       self:print("setColor ignored – group does not support color (CT-only lights)")
@@ -932,7 +937,7 @@ function defClasses()
     end
     local x,y = HUE:rgbToXy(r,g,b)
     self.group:rawCmd({color={xy={x=x,y=y}}})
-    self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+    self:updateProperty("color",color)
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
   end
   -- Sets color from a colorComponents table {red,green,blue,warmWhite}.
@@ -948,7 +953,8 @@ function defClasses()
     if hasRGB and (self.group.rsrc and self.group.rsrc.color) then
       local x,y = HUE:rgbToXy(r,g,b)
       self.group:rawCmd({color={xy={x=x,y=y}}})
-      self:updateProperty("color",string.format("%02X%02X%02X",r,g,b))
+      local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
+      self:updateProperty("color",color)
     elseif value.warmWhite ~= nil then
       local mirek = math.floor(153 + (w/255)*(454-153))
       self.group:rawCmd({color_temperature={mirek=mirek}})
