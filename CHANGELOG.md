@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.4] - 2026-04-13
+
+## Changes in v0.2.4
+
+- 🐛 **Fix**: adjust whitespace in save directive and update light value handling
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.3] - 2026-04-08
 
 ## Changes in v0.2.3
