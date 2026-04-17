@@ -693,10 +693,11 @@ function defClasses()
       if value > 0 then self:updateProperty("state",true) end
     end)
     self.dev:subscribe("color",function(key,value,b)
-      if value.xy then
-        local r,g,b0 = HUE:xyToRgb(value.xy.x,value.xy.y,value.brightness or 100)
+      if value.x and value.y then
+        local r,g,b0 = HUE:xyToRgb(value.x,value.y,value.brightness or 100)
         self:print("color xy %s,%s,%s",r,g,b0)
-        self:updateProperty("color",string.format("%02X%02X%02X",r,g,b0))
+        local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b0 or 0, w or 0) -- For logging purposes
+        self:updateProperty("color",color)
         self:updateProperty("colorComponents",{red=r,green=g,blue=b0,white=0})
       end
     end)
@@ -858,7 +859,7 @@ function defClasses()
       if not value or not value.x then return end
       local r,g,b0 = HUE:xyToRgb(value.x,value.y,100)
       self:print("color xy %s,%s,%s",r,g,b0)
-      self:updateProperty("color",string.format("%02X%02X%02X",r,g,b0))
+      updateProperty("color",string.format("%d,%d,%d,0", r or 0, g or 0, b0 or 0))
       self:updateProperty("colorComponents",{red=r,green=g,blue=b0,warmWhite=0})
     end)
     
