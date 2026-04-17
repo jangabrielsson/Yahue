@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.5] - 2026-04-17
+
+## Changes in v0.2.5
+
+- 🐛 **Fix**: correct spacing in proxy directive
+- 🐛 **Fix**: correct proxy directive formatting and update color handling in devices
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.4] - 2026-04-13
 
 ## Changes in v0.2.4
