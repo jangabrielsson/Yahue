@@ -73,3 +73,25 @@ end
 -- Color temperature conversions
 function HUE:kelvinToMired(k) return math.floor(1000000 / k + 0.5) end
 function HUE:miredToKelvin(m) return math.floor(1000000 / m + 0.5) end
+
+-- Kelvin (1000-40000) → RGB (0-255). Tanner Helland approximation.
+-- Useful for visualising a CT-only light/group as a colour ring tint.
+function HUE:kelvinToRgb(k)
+  k = (k or 6500) / 100
+  local r,g,b
+  if k <= 66 then
+    r = 255
+    g = 99.4708025861 * math.log(k) - 161.1195681661
+    if k <= 19 then b = 0
+    else b = 138.5177312231 * math.log(k - 10) - 305.0447927307 end
+  else
+    r = 329.698727446 * (k - 60) ^ -0.1332047592
+    g = 288.1221695283 * (k - 60) ^ -0.0755148492
+    b = 255
+  end
+  local function clamp(v) if v < 0 then return 0 end; if v > 255 then return 255 end; return math.floor(v + 0.5) end
+  return clamp(r), clamp(g), clamp(b)
+end
+
+-- Mirek (153-500) → RGB (0-255). Convenience wrapper.
+function HUE:mirekToRgb(m) return HUE:kelvinToRgb(HUE:miredToKelvin(m)) end

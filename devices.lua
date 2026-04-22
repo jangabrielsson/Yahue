@@ -534,16 +534,18 @@ function defClasses()
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
-  -- DimLight  →  com.fibaro.multilevelSwitch
-  -- Hue service: light with on + dimming (no color, no color_temperature).
-  -- setValue(0-100) sets brightness via light:setDim().
-  -- annotate() adds the levelChange interface.
+  -- DimmableLight  (abstract base for DimLight / TempLight / ColorLight)
+  -- Provides the shared on/dimming subscriptions, lastVal restore logic, and
+  -- the standard turnOn/turnOff/setValue/startLevelIncrease/.../stopLevelChange
+  -- behaviour. Subclasses call DimmableLight.__init(self,device), then add
+  -- any extra subscriptions (color, color_temperature, ...) and finally call
+  -- self.dev:publishAll() once.
+  -- Not registered in devProps; never instantiated directly.
   -- ─────────────────────────────────────────────────────────────────────────
-  class 'DimLight'(HueClass)
-  DimLight.htype = "com.fibaro.multilevelSwitch"
-  function DimLight:__init(device)
+  class 'DimmableLight'(HueClass)
+  function DimmableLight:__init(device)
     HueClass.__init(self,device)
-    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+    self.dimdelay   = tonumber(self:getVariable("dimdelay"))   or 8000
     self.transition = tonumber(self:getVariable("transition")) or 0
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
@@ -554,116 +556,78 @@ function defClasses()
     end)
     self.dev:subscribe("dimming",function(key,value,b)
       self:print("dimming %s",value)
-      self.lastVal = ROUND(value)
-      self:updateProperty("value",self.lastVal)
+      -- Hue reports dimming=0 when the light is off; ignore so lastVal stays
+      -- as the last positive brightness (HC3 forces state=false on value=0).
+      if value > 0 then self.lastVal = ROUND(value) end
+      if self.properties.state then
+        self:updateProperty("value",self.lastVal or 100)
+      end
     end)
-    self.dev:publishAll()
   end
-  function DimLight:turnOn()
+  function DimmableLight:turnOn()
     self:updateProperty("state",true)
     self:updateProperty("value",self.lastVal or 100)
     self.light:turnOn(self.transition)
   end
-  function DimLight:turnOff()
+  function DimmableLight:turnOff()
     self:updateProperty("state",false)
     self:updateProperty("value",0)
     self.light:turnOff(self.transition)
   end
-  function DimLight:setValue(value)
+  function DimmableLight:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:updateProperty("value",value)
     self.light:setDim(value, self.transition)
   end
-  function DimLight:startLevelIncrease()
+  function DimmableLight:startLevelIncrease()
     self:print("startLevelIncrease")
     local val = self.properties.value
     val = ROUND((100-val)/100.0*self.dimdelay)
     self.light:setDim(100,val)
   end
-  function DimLight:startLevelDecrease()
+  function DimmableLight:startLevelDecrease()
     self:print("startLevelDecrease")
     local val = self.properties.value
     val = ROUND((val-0)/100.0*self.dimdelay)
     self.light:setDim(0,val)
   end
-  function DimLight:stopLevelChange()
+  function DimmableLight:stopLevelChange()
     self.light:setDim(-1)
   end
-  function DimLight.annotate(rsrc)
+  function DimmableLight.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
     table.insert(rsrc.interfaces,"levelChange")
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
+  -- DimLight  →  com.fibaro.multilevelSwitch
+  -- Hue service: light with on + dimming (no color, no color_temperature).
+  -- ─────────────────────────────────────────────────────────────────────────
+  class 'DimLight'(DimmableLight)
+  DimLight.htype = "com.fibaro.multilevelSwitch"
+  function DimLight:__init(device)
+    DimmableLight.__init(self,device)
+    self.dev:publishAll()
+  end
+
+  -- ─────────────────────────────────────────────────────────────────────────
   -- TempLight  →  com.fibaro.colorController
   -- Hue service: light with on + dimming + color_temperature (no xy color).
-  -- setColorTemperature() sets Hue color_temperature (mirek) via light:setTemperature().
   -- ─────────────────────────────────────────────────────────────────────────
-  class 'TempLight'(HueClass)
+  class 'TempLight'(DimmableLight)
   TempLight.htype = "com.fibaro.colorController"
   function TempLight:__init(device)
-    HueClass.__init(self,device)
-    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
-    self.transition = tonumber(self:getVariable("transition")) or 0
-    self.light = self.dev:findServiceByType('light')[1] or self.dev
-    self.dev:subscribe("on",function(key,value,b)
-      self:print("on %s",value)
-      self:updateProperty("state",value)
-      if not value then self:updateProperty("value",0) 
-      else self:updateProperty("value",self.lastVal or 100)
-      end
-    end)
-    self.dev:subscribe("dimming",function(key,value,b)
-      self:print("dimming %s",value)
-      self.lastVal = ROUND(value)
-      self:updateProperty("value",self.lastVal)
-      if value > 0 then self:updateProperty("state",true) end
-    end)
+    DimmableLight.__init(self,device)
     self.dev:subscribe("color_temperature",function(key,value,b)
       self:print("color_temperature %s",value)
       self:updateProperty("colorTemperature",value)
     end)
     self.dev:publishAll()
   end
-  function TempLight:turnOn()
-    self:updateProperty("state",true)
-    self:updateProperty("value",self.lastVal or 100)
-    self.light:turnOn(self.transition)
-  end
-  function TempLight:turnOff()
-    self:updateProperty("state",false)
-    self:updateProperty("value",0)
-    self.light:turnOff(self.transition)
-  end
-  function TempLight:setValue(value)
-    if type(value)=='table' and value.values then value = value.values[1] end
-    value = tonumber(value)
-    self:updateProperty("value",value)
-    self.light:setDim(value, self.transition)
-  end
-  function TempLight:startLevelIncrease()
-    self:print("startLevelIncrease")
-    local val = self.properties.value
-    val = ROUND((100-val)/100.0*self.dimdelay)
-    self.light:setDim(100,val)
-  end
-  function TempLight:startLevelDecrease()
-    self:print("startLevelDecrease")
-    local val = self.properties.value
-    val = ROUND((val-0)/100.0*self.dimdelay)
-    self.light:setDim(0,val)
-  end
-  function TempLight:stopLevelChange()
-    self.light:setDim(-1)
-  end
   function TempLight:setColorTemperature(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     self.light:setTemperature(tonumber(value))
-  end
-  function TempLight.annotate(rsrc)
-    rsrc.interfaces = rsrc.interfaces or {}
-    table.insert(rsrc.interfaces,"levelChange")
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
@@ -672,31 +636,15 @@ function defClasses()
   -- setColor("RRGGBB") converts RGB to CIE xy via HUE:rgbToXy() and sends to Hue.
   -- annotate() adds the color interface.
   -- ─────────────────────────────────────────────────────────────────────────
-  class 'ColorLight'(HueClass)
+  class 'ColorLight'(DimmableLight)
   ColorLight.htype = "com.fibaro.colorController"
   function ColorLight:__init(device)
-    HueClass.__init(self,device)
-    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
-    self.transition = tonumber(self:getVariable("transition")) or 0
-    self.light = self.dev:findServiceByType('light')[1] or self.dev
-    self.dev:subscribe("on",function(key,value,b)
-      self:print("on %s",value)
-      self:updateProperty("state",value)
-      if not value then self:updateProperty("value",0) 
-      else self:updateProperty("value",self.lastVal or 100) 
-      end
-    end)
-    self.dev:subscribe("dimming",function(key,value,b)
-      self:print("dimming %s",value)
-      self.lastVal = ROUND(value)
-      self:updateProperty("value",self.lastVal)
-      if value > 0 then self:updateProperty("state",true) end
-    end)
+    DimmableLight.__init(self,device)
     self.dev:subscribe("color",function(key,value,b)
       if value.x and value.y then
         local r,g,b0 = HUE:xyToRgb(value.x,value.y,value.brightness or 100)
         self:print("color xy %s,%s,%s",r,g,b0)
-        local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b0 or 0, w or 0) -- For logging purposes
+        local color = string.format("%d,%d,%d,0", r or 0, g or 0, b0 or 0)
         self:updateProperty("color",color)
         self:updateProperty("colorComponents",{red=r,green=g,blue=b0,white=0})
       end
@@ -706,38 +654,6 @@ function defClasses()
       self:updateProperty("colorTemperature",value)
     end)
     self.dev:publishAll()
-  end
-  function ColorLight:turnOn()
-    self:updateProperty("state",true)
-    self:updateProperty("value",self.lastVal or 100)
-    self.light:turnOn(self.transition)
-  end
-  function ColorLight:turnOff()
-    self:print("Turn off")
-    --self:updateProperty("value",0)
-    self:updateProperty("state",false)
-    self.light:turnOff(self.transition)
-  end
-  function ColorLight:setValue(value)
-    if type(value)=='table' and value.values then value = value.values[1] end
-    value = tonumber(value)
-    self:updateProperty("value",value)
-    self.light:setDim(value, self.transition)
-  end
-  function ColorLight:startLevelIncrease()
-    self:print("startLevelIncrease")
-    local val = self.properties.value
-    val = ROUND((100-val)/100.0*self.dimdelay)
-    self.light:setDim(100,val)
-  end
-  function ColorLight:startLevelDecrease()
-    self:print("startLevelDecrease")
-    local val = self.properties.value
-    val = ROUND((val-0)/100.0*self.dimdelay)
-    self.light:setDim(0,val)
-  end
-  function ColorLight:stopLevelChange()
-    self.light:setDim(-1)
   end
   function ColorLight:setColor(r,g,b,w)
     local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) -- For logging purposes
@@ -759,7 +675,7 @@ function defClasses()
     if hasRGB then
       local x,y = HUE:rgbToXy(r,g,b)
       self.light:sendCmd({color={xy={x=x,y=y}}})
-      local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
+      local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0)
       self:updateProperty("color",color)
     elseif value.warmWhite ~= nil then
       -- Map warmWhite 0-255 to mirek range 153 (6500K cool) to 454 (2200K warm)
@@ -794,81 +710,136 @@ function defClasses()
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
     self.transition = tonumber(self:getVariable("transition")) or 0
     self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
-    
-    -- Check room/zone dead status
-    local statuses = {}
-    local devsons = {}
+
+    -- Per-member aggregation state. The Hue `grouped_light` resource does not
+    -- reliably emit `on` events when only individual member lights change,
+    -- so we subscribe to each member's light service and derive on/state
+    -- ourselves. All maps below are keyed by the *light service id* so they
+    -- line up with the `on`/`color`/`dimming` events (which fire on the
+    -- service, not the owning device).
+    --   statuses[svcId] = connected (bool)        (still keyed by device — see below)
+    --   devsons[svcId]  = on        (bool)
+    --   memberXY[svcId] = {r,g,b}   from xy colour (preferred when present)
+    --   memberCT[svcId] = {r,g,b}   from colour temperature (fallback)
+    --   memberBri[svcId]= 0-100     per-member brightness
+    local statuses  = {}
+    local devsons   = {}
+    local memberXY  = {}
+    local memberCT  = {}
+    local memberBri = {}
+    self.lastVal = nil  -- last known positive group brightness
+
+    -- Recomputes the room's `color` property as a brightness-weighted RGB
+    -- average across all currently-on members. Prefers xy colour over CT
+    -- per member. With no on members, leaves the previous colour in place
+    -- (avoids ugly flash to black on turn-off).
+    local function aggregateColor()
+      local R,G,B,W = 0,0,0,0
+      for svcId,on in pairs(devsons) do
+        if on then
+          local rgb = memberXY[svcId] or memberCT[svcId]
+          if rgb then
+            local w = (memberBri[svcId] or 100)
+            R = R + rgb[1]*w; G = G + rgb[2]*w; B = B + rgb[3]*w
+            W = W + w
+          end
+        end
+      end
+      if W <= 0 then return end
+      local r = ROUND(R/W); local g = ROUND(G/W); local b = ROUND(B/W)
+      self:updateProperty("color", string.format("%d,%d,%d,0", r, g, b))
+      self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
+    end
+
+    local function aggregate()
+      -- dead: room is dead only if ALL members are disconnected
+      local anyAlive = false
+      for _,s in pairs(statuses) do if s then anyAlive = true; break end end
+      self:updateProperty("dead", not anyAlive)
+
+      -- state: on if ANY member light is on
+      local anyOn = false
+      for _,v in pairs(devsons) do if v then anyOn = true; break end end
+
+      self:updateProperty("state", anyOn)
+      -- HC3 quirk: value=0 on colorController forces state=false, so we must
+      -- never write value=0 while anyOn is true. Restore from lastVal when
+      -- coming back on with no current brightness.
+      if anyOn then
+        local cur = tonumber(self.properties.value) or 0
+        if cur <= 0 then
+          self:updateProperty("value", self.lastVal or 100)
+        end
+      else
+        self:updateProperty("value", 0)
+      end
+      aggregateColor()
+    end
+
     for _,c in pairs(self.dev.children or {}) do
       c = HUE:_resolve(c)
       if c.type ~= 'device' then
         c = HUE:_resolve(c.owner)
       end
-      local props = c:getProps()
-      --if props.status then
-      statuses[c.id] = true
       c = HUE:getResource(c.id)
+      statuses[c.id] = true
+      local memberId = c.id
       c:subscribe("status",function(key,value,b)
         statuses[b.id] = value == 'connected'
-        local stat = true
-        for _,s in pairs(statuses) do stat=stat and s end
-        local oldDead = fibaro.getValue(self.id,'dead')
-        self:updateProperty("dead",not stat)
-        local state = fibaro.getValue(self.id,'state')
-        local value = fibaro.getValue(self.id,'value')
-        if (not stat) ~= oldDead then -- change in dead state
-           if not stat then -- Now dead
-              self.deadStatus = {state,value}
-              self:updateProperty('state',false)
-              self:updateProperty('value',0)
-           else -- Now living
-              if self.deadStatus then
-                self:updateProperty('state',self.deadStatus[1])
-                self:updateProperty('value',self.deadStatus[2])
-              end
-           end
-        end
-        self:print("status %s",stat)
+        self:print("member %s status %s", b.id:sub(1,8), value)
+        aggregate()
       end)
       c:subscribe("on",function(key,value,b)
-        devsons[b.id] = value
-        print("c on",value,b.id)
-        for _,s in pairs(devsons) do
-          --
-        end
+        devsons[b.id] = value and true or false
+        self:print("member %s on %s", b.id:sub(1,8), value)
+        aggregate()
       end)
+
+      -- Per-member colour tracking. We bind to the device's light service
+      -- (if any) so we can read color/CT/dimming for the colour ring.
+      -- Keying by the service id matches the `on` event source above.
+      local lightSvc = c.findServiceByType and c:findServiceByType('light')[1]
+      if lightSvc then
+        local svcId = lightSvc.id
+        lightSvc:subscribe("color",function(key,value,_)
+          if not (value and value.x) then return end
+          local r,g,b0 = HUE:xyToRgb(value.x, value.y, 100)
+          self:print("member %s color %d,%d,%d", svcId:sub(1,8), r,g,b0)
+          memberXY[svcId] = {r,g,b0}
+          aggregateColor()
+        end)
+        lightSvc:subscribe("color_temperature",function(key,value,_)
+          if not value then return end
+          local mirek = type(value)=='table' and value.mirek or value
+          if type(mirek) ~= 'number' then return end
+          local r,g,b0 = HUE:mirekToRgb(mirek)
+          self:print("member %s ct %s -> %d,%d,%d", svcId:sub(1,8), mirek, r,g,b0)
+          memberCT[svcId] = {r,g,b0}
+          aggregateColor()
+        end)
+        lightSvc:subscribe("dimming",function(key,value,_)
+          if type(value) == 'number' and value > 0 then
+            memberBri[svcId] = value
+            aggregateColor()
+          end
+        end)
+        -- Publish the light service so the colour/CT/dimming subscriptions
+        -- fire with current state at startup. Device:publishAll only emits
+        -- the device's own props, not its services'.
+        local svc0 = lightSvc
+        setTimeout(function() svc0:publishAll() end, 0)
+      end
+
       local c0 = c
-      setTimeout(function()
-        c0:publishAll()
-      end,0)
-      --end
+      setTimeout(function() c0:publishAll() end, 0)
     end
-    
-    self.dev:subscribe("on",function(key,value,b)
-      self:print("on %s",value)
-      local d = b._props.dimming and ROUND(b._props.dimming.get(b.rsrc)) or 0
-      self:updateProperty("state",value)
-      self:updateProperty("value",value and d or 0)
-    end)
-    
-    self.dev:subscribe("dimming",function(key,value,b)
-      self:print("dimming %s",value)
-      self:updateProperty("value",ROUND(value))
-    end)
-    
-    self.dev:subscribe("color",function(key,value,_)
-      if not value or not value.x then return end
-      local r,g,b0 = HUE:xyToRgb(value.x,value.y,100)
-      self:print("color xy %s,%s,%s",r,g,b0)
-      updateProperty("color",string.format("%d,%d,%d,0", r or 0, g or 0, b0 or 0))
-      self:updateProperty("colorComponents",{red=r,green=g,blue=b0,warmWhite=0})
-    end)
-    
-    self.dev:subscribe("color_temperature",function(key,value,b)
-      if not value then return end
-      self:print("color_temperature %s",value)
-      self:updateProperty("colorTemperature",value)
-    end)
-    
+
+    -- NOTE: we deliberately do NOT subscribe to the grouped_light `dimming`,
+    -- `color` or `color_temperature` events. Hue computes a group-level
+    -- representative that does not match any member (e.g. white average of
+    -- one red + one off light), and dimming emits transient mid-fade values.
+    -- The room's value/color are derived from per-member subscriptions above.
+
     self.dev:publishAll()
     loadScenesForRoom(self)
   end
@@ -878,15 +849,26 @@ function defClasses()
     self:setVariable("scene",event)
   end
   -- Turns the group on. If a scene name is provided (or stored via setScene),
-  -- recalls that scene; otherwise sends a plain on command to the group.
+  -- recalls that scene; otherwise sends an on command to the group with the
+  -- last known brightness (Hue defaults to ~50% otherwise on group on).
   function RoomZoneQA:turnOn(sceneArg)
-    self:updateProperty("value", 100)
+    local restore = self.lastVal or tonumber(self.properties.value) or 0
+    if restore <= 0 then restore = 100 end
+    self.lastVal = restore
+    self:print("Turn on (restore %s%%)", restore)
+    self:updateProperty("value", restore)
     self:updateProperty("state", true)
     local sceneName = type(sceneArg)=='string' and sceneArg or self:getVar("scene")
     local scene = HUE:getSceneByName(sceneName,self.dev.name)
     if sceneName and not scene then self:print("Scene %s not found",sceneName) end
     if not scene then
-      self.group:turnOn(self.transition)
+      -- Send dimming together with on so Hue uses our brightness instead of
+      -- the bridge's per-group default (often ~50%).
+      self.group:sendCmd({
+        on = {on = true},
+        dimming = {brightness = restore},
+        dynamics = self.transition and self.transition > 0 and {duration = self.transition} or nil,
+      })
     else
       self:print("Turn on Scene %s",scene.name)
       scene:recall()
@@ -895,6 +877,10 @@ function defClasses()
   -- Turns the entire group off.
   function RoomZoneQA:turnOff()
     self:print("Turn off")
+    -- Capture current brightness as lastVal *before* zeroing it, so a
+    -- subsequent turnOn restores to the same level.
+    local cur = tonumber(self.properties.value) or 0
+    if cur > 0 then self.lastVal = cur end
     self:updateProperty("value", 0)
     self:updateProperty("state", false)
     self.group:turnOff(self.transition)
@@ -904,6 +890,7 @@ function defClasses()
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
     self:print("setValue")
+    if value and value > 0 then self.lastVal = value end
     self:updateProperty("value", value)
     self.group:setDim(value, self.transition)
   end

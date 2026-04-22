@@ -584,6 +584,33 @@ local function main()
     self:sendCmd({on={on=not on},dynamics=transition and {duration=transition} or nil})
   end
   function grouped_light:rawCmd(cmd) self:sendCmd(cmd) end
+  -- Hue v2 quirk: when a grouped_light is commanded (or recalled via scene),
+  -- the bridge does not always emit per-member-light SSE events. Override
+  -- event() to first apply the change to ourselves, then replay the same
+  -- payload on each member light service. The light's own `changed` check
+  -- makes this idempotent if Hue does also send per-light events.
+  function grouped_light:event(data)
+    hueResource.event(self,data)
+    -- Only replay the on/off field to members. Replaying dimming/color/CT
+    -- causes spurious state changes because Hue sends the group's aggregate
+    -- value (e.g. brightness=100 right after a turn-off) which doesn't apply
+    -- to every member individually. Per-light events handle the rest.
+    if not data.on then return end
+    local relayed = { on = data.on }
+    local owner = self.owner and resolve(self.owner) or nil
+    if not owner or not owner.children then return end
+    for _,c in ipairs(owner.children) do
+      local dev = resolve(c)
+      if dev and dev.services then
+        for _,s in ipairs(dev.services) do
+          local svc = resolve(s)
+          if svc and svc.type == 'light' and svc.id ~= self.id then
+            svc:event(relayed)
+          end
+        end
+      end
+    end
+  end
   function grouped_light:setTemperature(t,transition) self:sendCmd({color_temperature={mirek=math.floor(t+0.5)},dynamics=transition and {duration=transition} or nil}) end
   function grouped_light:signal(sig, duration_ms, colors)
     if sig == 'stop' then self:sendCmd({signaling={signal='no_signal'}}) return end
