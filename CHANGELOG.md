@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.7] - 2026-04-22
+
+## Changes in v0.2.7
+
+- 🐛 **Fix**: correct formatting of proxy directive in Yahue.lua
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.6] - 2026-04-22
 
 ## Changes in v0.2.6
