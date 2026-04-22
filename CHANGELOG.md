@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.6] - 2026-04-22
+
+## Changes in v0.2.6
+
+- ✨ **Feature**: add kelvin to RGB conversion functions and improve grouped light event handling
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.5] - 2026-04-17
 
 ## Changes in v0.2.5
