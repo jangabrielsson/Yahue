@@ -835,6 +835,7 @@ local function main()
   local function fetchEvents_emu()
     local getw
     local eurl = url.."/eventstream/clip/v2"
+    local backoff = 0   -- ms; grows on consecutive errors, reset on success
     local args = { options = { 
       method='GET', 
       checkCertificate=false, 
@@ -843,12 +844,30 @@ local function main()
         ['Accept'] = "application/json",
       }}
     }
+    local function bumpBackoff()
+      if backoff == 0 then backoff = 1000
+      else backoff = math.min(backoff * 2, 30000) end
+      return backoff
+    end
     function args.success(res)
-      local data = json.decode(res.data)
-      handle_events(data)
+      backoff = 0
+      local ok,err = pcall(function()
+        local data = json.decode(res.data)
+        handle_events(data)
+      end)
+      if not ok then ERROR("/eventstream parse: %s", tostring(err)) end
       getw()
     end
-    function args.error(err) if not err:match("timed out") and err~="wantread" then ERROR("/eventstream: %s",err) end getw() end
+    function args.error(err)
+      local transient = err and (err:match("timed out") or err == "wantread")
+      if not transient then
+        local d = bumpBackoff()
+        ERROR("/eventstream: %s (retry in %dms)", err, d)
+        setTimeout(getw, d)
+      else
+        getw()
+      end
+    end
     function getw() net.HTTPClient():request(eurl,args) end
     setTimeout(getw,0)
   end
@@ -856,6 +875,7 @@ local function main()
   local function fetchEvents_hc3()
     local getw
     local eurl = url.."/eventstream/clip/v2"
+    local backoff = 0   -- ms; grows on consecutive errors, reset on success
     local args = {
       options = { 
         method='GET', 
@@ -867,22 +887,49 @@ local function main()
         timeout = 2000 
       }
     }
+    local function bumpBackoff()
+      if backoff == 0 then backoff = 1000
+      else backoff = math.min(backoff * 2, 30000) end
+      return backoff
+    end
+    -- HC3's HTTPClient keeps the SSE (text/event-stream) connection open and
+    -- calls `success` repeatedly as the bridge pushes event chunks. We must
+    -- NOT re-issue the request on every success — that would fan out to many
+    -- concurrent connections. We only re-arm via getw() on error or on a
+    -- parse failure (which means the underlying stream is broken).
+    -- A good `success` resets the backoff; failures grow it (1s → 2s → ...
+    -- → 30s cap) so an unreachable bridge does not spam reconnects.
     function args.success(res)
+      backoff = 0
       local stat,err = pcall(function()
         local body = res and res.data
-        if type(body) == 'string' and body ~= '' and not body:match("^: hi") then
-          local arr = body:match("(%b[])")
-          if arr then
-            local data = json.decode(arr)
-            if data then handle_events(data) end
-          end
-        end
+        if type(body) ~= 'string' or body == '' then return end
+        if body:match("^: hi") then return end          -- SSE keep-alive comment
+        local arr = body:match("(%b[])")
+        if not arr then return end                      -- partial / non-data frame
+        local data = json.decode(arr)
+        if data then handle_events(data) end
       end)
-      if not stat then ERROR("/eventstream parse: %s", tostring(err)) end
-      getw()
+      if not stat then
+        local d = bumpBackoff()
+        ERROR("/eventstream parse: %s (retry in %dms)", tostring(err), d)
+        setTimeout(getw, d)
+      end
     end
-    function args.error(err) if err~="timeout" and err~="wantread" then ERROR("/eventstream: %s",err) end getw() end
-    function getw() net.HTTPClient():request(eurl,args) end
+    function args.error(err)
+      local transient = err == "timeout" or err == "wantread"
+      if not transient then
+        local d = bumpBackoff()
+        ERROR("/eventstream: %s (retry in %dms)", err, d)
+        setTimeout(getw, d)
+      else
+        getw()
+      end
+    end
+    function getw() 
+      --print("GW")
+      net.HTTPClient():request(eurl,args) 
+    end
     setTimeout(getw,0)
   end
   
