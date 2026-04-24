@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.9] - 2026-04-24
+
+## Changes in v0.2.9
+
+- ✨ **Feature**: add release notes for v0.2.8 and improve error handling in event stream
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.8] - 2026-04-24
 
 ## Changes in v0.2.8
