@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.8] - 2026-04-24
+
+## Changes in v0.2.8
+
+- ✨ **Feature**: update version to 0.51 and improve error handling in event stream
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.7] - 2026-04-22
 
 ## Changes in v0.2.7
