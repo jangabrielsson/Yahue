@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.50
+local _version_e = 0.51
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -868,13 +868,18 @@ local function main()
       }
     }
     function args.success(res)
-      local stat,res = pcall(function()
-        if res.data:match("^: hi") then res.data="[]"
-        else res.data = res.data:match("(%b[])") end
-        local data = json.decode(res.data)
-        handle_events(data)
+      local stat,err = pcall(function()
+        local body = res and res.data
+        if type(body) == 'string' and body ~= '' and not body:match("^: hi") then
+          local arr = body:match("(%b[])")
+          if arr then
+            local data = json.decode(arr)
+            if data then handle_events(data) end
+          end
+        end
       end)
-      if not stat then print("ERR",res) getw() end
+      if not stat then ERROR("/eventstream parse: %s", tostring(err)) end
+      getw()
     end
     function args.error(err) if err~="timeout" and err~="wantread" then ERROR("/eventstream: %s",err) end getw() end
     function getw() net.HTTPClient():request(eurl,args) end
