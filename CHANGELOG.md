@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.11] - 2026-04-25
+
+## Changes in v0.2.11
+
+- ✨ **Feature**: update version to 0.56 and enhance error handling in resource management
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.10] - 2026-04-25
 
 ## Changes in v0.2.10
