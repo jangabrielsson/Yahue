@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.52
+local _version_e = 0.56
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -121,6 +121,7 @@ local function main()
   local function createResourceTable()
     local self = { resources={}, id2resource={} }
     local resources,id2resource = self.resources,self.id2resource
+    local warnedTypes = {}
     function self.changeHook() end
     function self.add(id,rsrc)
       local typ = rsrc.type
@@ -129,7 +130,10 @@ local function main()
         if classes[typ] then
           rsrc = classes[typ](rsrc)
         else
-          WARNING("Missing resource type:%s",typ)
+          if not warnedTypes[typ] then
+            warnedTypes[typ] = true
+            WARNING("Missing resource type:%s (further events for this type will be ignored)",typ)
+          end
           return
         end
         resources[typ]=resources[typ] or {};
@@ -139,12 +143,18 @@ local function main()
       end
     end
     function self.modify(id,rsrc)
-      assert(id2resource[id],"No resource for modify")
+      -- Silently ignore modify for ids we never registered (e.g. resources
+      -- of an unknown/unsupported type — see self.add).
+      if not id2resource[id] then return end
       id2resource[id]:modified(rsrc)
     end
     function self.delete(id)
+      -- Silently ignore delete for ids we never registered. Otherwise an
+      -- asserted error here crashes the SSE event loop and the QA stops
+      -- receiving events. This commonly happens when the bridge sends a
+      -- delete for an unsupported resource type (e.g. smart_scene/clip).
       local rsrc=id2resource[id]
-      assert(rsrc,"No resource")
+      if not rsrc then return end
       resources[rsrc.type][id]=nil
       rsrc:deleted()
       id2resource[id]=nil
@@ -878,6 +888,31 @@ local function main()
     local getw
     local eurl = url.."/eventstream/clip/v2"
     local backoff = 0   -- ms; grows on consecutive errors, reset on success
+    -- Watchdog: the SSE TCP socket can go silently half-dead (router NAT
+    -- timeout, Wi-Fi blip, bridge restart) so neither success nor error
+    -- ever fires again. Hue sends a `: hi` keep-alive at least every ~30s,
+    -- so if we see nothing for WATCHDOG_MS we force a reconnect.
+    -- Configurable via QA variable `sseWatchdog` (seconds), default 300s.
+    -- Set to 0 to disable. Reconnecting a healthy SSE stream just churns
+    -- the bridge's connection table, so keep this generous.
+    local watchdogSec = tonumber(quickApp:getVariable("sseWatchdog")) or 300
+    local WATCHDOG_MS = watchdogSec * 1000
+    local lastSeen = 0
+    local watchdogRef
+    local function armWatchdog()
+      if WATCHDOG_MS <= 0 then return end
+      if watchdogRef then clearTimeout(watchdogRef) end
+      watchdogRef = setTimeout(function()
+        watchdogRef = nil
+        local quiet = (os.time() - lastSeen) * 1000
+        if quiet >= WATCHDOG_MS then
+          WARNING("/eventstream: no data for %ds, reconnecting", math.floor(quiet/1000))
+          getw()
+        else
+          armWatchdog()
+        end
+      end, WATCHDOG_MS)
+    end
     local args = {
       options = { 
         method='GET', 
@@ -903,6 +938,7 @@ local function main()
     -- → 30s cap) so an unreachable bridge does not spam reconnects.
     function args.success(res)
       backoff = 0
+      lastSeen = os.time()
       local stat,err = pcall(function()
         local body = res and res.data
         if type(body) ~= 'string' or body == '' then return end
@@ -929,7 +965,8 @@ local function main()
       end
     end
     function getw() 
-      --print("GW")
+      lastSeen = os.time()
+      armWatchdog()
       net.HTTPClient():request(eurl,args) 
     end
     setTimeout(getw,0)
