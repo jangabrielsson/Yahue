@@ -17,7 +17,7 @@
 
 -- %%desktop:true
 -- %%offline:true
--- %%proxy:true
+--%%proxy:true
 
 -- Hue resource kind → Fibaro QA type mapping
 -- ┌─────────────────────┬──────────────────────────────────┬────────────────────────────────────────────┐

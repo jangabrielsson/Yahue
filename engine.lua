@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.51
+local _version_e = 0.52
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -591,11 +591,13 @@ local function main()
   -- makes this idempotent if Hue does also send per-light events.
   function grouped_light:event(data)
     hueResource.event(self,data)
-    -- Only replay the on/off field to members. Replaying dimming/color/CT
-    -- causes spurious state changes because Hue sends the group's aggregate
-    -- value (e.g. brightness=100 right after a turn-off) which doesn't apply
-    -- to every member individually. Per-light events handle the rest.
-    if not data.on then return end
+    -- Only replay the on/off field to members, and ONLY for on=false.
+    -- A grouped_light's `on=true` only means "at least one member is on" —
+    -- replaying it would falsely mark every member as on whenever a single
+    -- light in the group is switched on. `on=false` is unambiguous (all
+    -- members are off) so it is safe to fan out. Dimming/color/CT are
+    -- aggregated values and are never replayed; per-light events cover them.
+    if not data.on or data.on.on ~= false then return end
     local relayed = { on = data.on }
     local owner = self.owner and resolve(self.owner) or nil
     if not owner or not owner.children then return end
