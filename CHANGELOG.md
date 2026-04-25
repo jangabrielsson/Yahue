@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.10] - 2026-04-25
+
+## Changes in v0.2.10
+
+- ✨ **Feature**: update version to 0.52 and improve event handling for grouped lights
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.9] - 2026-04-24
 
 ## Changes in v0.2.9
