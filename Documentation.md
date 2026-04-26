@@ -13,6 +13,10 @@ Yahue is a Fibaro HC3 QuickApp that bridges the Philips Hue v2 API. It discovers
 
 ### Installing the QuickApp
 
+The **recommended** way to install and keep Yahue up to date is the [QA Dist Manager](https://forum.fibaro.com/topic/80052-qa-dist-manager/) QuickApp. It can install Yahue directly from the GitHub releases and notify you of new versions.
+
+Manual install:
+
 1. Download `dist/Yahue.fqa` from the [GitHub releases page](https://github.com/jangabrielsson/Yahue/releases)
 2. On your HC3 go to **Settings → QuickApps → Add QuickApp** and upload the `.fqa` file
 3. Open the newly created QuickApp and set the `Hue_IP` QuickApp Variable to the IP address of your Hue bridge (e.g. `192.168.1.50`)
@@ -81,9 +85,18 @@ Yahue automatically picks the appropriate HC3 device type based on the Hue resou
 
 ### Rooms and zones
 
-| Hue resource | HC3 type | Notes |
-|---|---|---|
-| Room or Zone | `com.fibaro.colorController` | Controls all lights in the group; supports scenes |
+Yahue inspects each room/zone group and picks the most appropriate HC3 type based on the capabilities of the lights it contains:
+
+| Group capabilities | HC3 type | Class | Notes |
+|---|---|---|---|
+| Any light supports color (RGB) | `com.fibaro.colorController` | `RoomZoneQA` | Full RGB + CT + scenes |
+| No color, any light supports color temperature | `com.fibaro.colorController` | `RoomZoneQA` | CT-only colour controller + scenes |
+| No color/CT, any light is dimmable | `com.fibaro.multilevelSwitch` | `RoomZoneDimQA` | Dim + scenes (e.g. plain white-dim entrance lights) |
+| On/off only | `com.fibaro.binarySwitch` | `RoomZoneSwitchQA` | On/off + scenes |
+
+All three variants share the same scene dropdown and Static/Dynamic toggle (see [Room / Zone controller](#room--zone-controller)).
+
+> The choice is made when the child device is first created. If you later add an RGB bulb to a previously dim-only group, remove and re-add the room from the device selector to have it re-typed.
 
 ---
 
@@ -125,19 +138,33 @@ Some child device behaviours can be tuned by setting a **QuickApp Variable** dir
 
 ## Room / Zone controller
 
-Room and zone devices (`RoomZoneQA`) give you full control over a Hue group.
+Room and zone devices give you full control over a Hue group. Yahue creates one of three variants depending on the group's capabilities (see [Rooms and zones](#rooms-and-zones)).
 
 ### Scene support
 
-Each Room/Zone child has a **Scene** dropdown in its panel. Selecting a scene from the dropdown stores it on the device. The next `turnOn` call will recall that scene automatically.
+Each Room/Zone child has a **Scene** dropdown and a **Static/Dynamic** toggle button in its panel.
 
-You can also set the scene programmatically:
+- **Scene dropdown** — lists every Hue scene defined for that room/zone. Selecting a scene immediately recalls it on the Hue bridge. The selection is persisted in the QA variable `lastSceneId` and is restored in the dropdown on the next restart.
+- **Static/Dynamic button** — toggles how scenes are recalled:
+  - **Static** — recalls the scene as defined (default).
+  - **Dynamic** — recalls the scene's dynamic palette (cycling colours on lights that support it).
+  The choice is persisted in the QA variable `sceneMode`.
+
+You can also store and recall scenes programmatically:
 
 ```lua
-fibaro.call(deviceId, "setScene", sceneId)   -- store scene UUID
-fibaro.call(deviceId, "turnOn")              -- recalls stored scene
-fibaro.call(deviceId, "turnOn", "Relax")     -- recall by name (one-off, not stored)
+fibaro.call(deviceId, "setScene", sceneName)   -- store scene name for later turnOn
+fibaro.call(deviceId, "turnOn")                -- recalls stored scene if any
+fibaro.call(deviceId, "turnOn", "Relax")       -- recall by name (one-off, not stored)
 ```
+
+### Colour / CT changes also turn the group on
+
+For `RoomZoneQA` (colour or CT-only), calling `setColor`, `setColorComponents` or `setColorTemperature` now sends `on=true` together with the colour change, so the group turns on if it was off — you always see the result of the action.
+
+### Brightness aggregation
+
+The group's displayed brightness (`value`) is computed as the average of the on-members' brightness, updated live as each member reports a new dimming level. This keeps the QA in sync with Hue scenes that set per-light brightness without emitting a group-level dimming event.
 
 ---
 
@@ -190,7 +217,7 @@ White-ambiance lights (tunable white, no colour).
 | `turnOn` | — | Turns on |
 | `turnOff` | — | Turns off |
 | `setValue` | `level` (0–100) | Sets brightness |
-| `setColorTemperature` | `mirek` (153–454) | Sets colour temperature. 153 = 6500 K cool white, 454 = 2200 K warm white |
+| `setColorTemperature` | `kelvin` (2000–6500) or `mirek` (153–500) | Sets colour temperature. HC3's standard `setColorTemperature` action passes Kelvin; values ≤ 1000 are treated as already-mirek for backward compatibility |
 
 ---
 
@@ -205,7 +232,7 @@ Full-colour lights.
 | `setValue` | `level` (0–100) | Sets brightness |
 | `setColor` | `"RRGGBB"` | Sets colour from hex string, e.g. `"FF0000"` for red |
 | `setColorComponents` | `{red,green,blue,warmWhite}` | Sets colour by component (0–255 each). RGB triggers colour mode; warmWhite alone triggers colour temperature mode |
-| `setColorTemperature` | `mirek` (153–454) | Sets colour temperature |
+| `setColorTemperature` | `kelvin` (2000–6500) or `mirek` (153–500) | Sets colour temperature (HC3 passes Kelvin) |
 | `startLevelIncrease` | — | Smooth ramp to 100% (duration controlled by `dimdelay` QA variable, default 8 s) |
 | `startLevelDecrease` | — | Smooth ramp to 0% (duration controlled by `dimdelay` QA variable, default 8 s) |
 | `stopLevelChange` | — | Stops any active ramp |
@@ -215,23 +242,25 @@ Full-colour lights.
 
 ---
 
-### RoomZoneQA — `com.fibaro.colorController`
+### RoomZoneQA / RoomZoneDimQA / RoomZoneSwitchQA
 
-Controls all lights in a Hue room or zone simultaneously.
+Controls all lights in a Hue room or zone simultaneously. The exact HC3 type depends on the group's light capabilities (see [Rooms and zones](#rooms-and-zones)). Methods below are exposed only when supported by the underlying group:
 
-| Method | Arguments | Description |
-|---|---|---|
-| `turnOn` | _(optional scene name)_ | Turns group on, optionally recalling a named scene |
-| `turnOff` | — | Turns entire group off |
-| `setValue` | `level` (0–100) | Sets group brightness |
-| `setColor` | `"RRGGBB"` | Sets group colour from hex string |
-| `setColorComponents` | `{red,green,blue,warmWhite}` | Sets group colour by component |
-| `setColorTemperature` | `mirek` (153–454) | Sets group colour temperature |
-| `startLevelIncrease` | — | Smooth group ramp to 100% (duration controlled by `dimdelay` QA variable, default 8 s) |
-| `startLevelDecrease` | — | Smooth group ramp to 0% (duration controlled by `dimdelay` QA variable, default 8 s) |
-| `stopLevelChange` | — | Stops group ramp |
-| `setScene` | `sceneId` | Stores a scene UUID to recall on next `turnOn` |
-| `signal` | `sig, duration_ms, colors` | Signalling effect on all group lights (see below) |
+| Method | Available on | Arguments | Description |
+|---|---|---|---|
+| `turnOn` | all | _(optional scene name)_ | Turns group on, optionally recalling a named scene |
+| `turnOff` | all | — | Turns entire group off |
+| `setValue` | Color, CT, Dim | `level` (0–100) | Sets group brightness |
+| `setColor` | Color | `"RRGGBB"` | Sets group colour from hex string. Also turns the group on |
+| `setColorComponents` | Color | `{red,green,blue,warmWhite}` | Sets group colour by component. Also turns the group on |
+| `setColorTemperature` | Color, CT | `kelvin` (2000–6500) or `mirek` (153–500) | Sets group colour temperature. Also turns the group on |
+| `startLevelIncrease` | Color, CT, Dim | — | Smooth group ramp to 100% (duration controlled by `dimdelay` QA variable, default 8 s) |
+| `startLevelDecrease` | Color, CT, Dim | — | Smooth group ramp to 0% (duration controlled by `dimdelay` QA variable, default 8 s) |
+| `stopLevelChange` | Color, CT, Dim | — | Stops group ramp |
+| `setScene` | all | `sceneName` | Stores a scene name to recall on next `turnOn` |
+| `sceneChanged` | all | event | UI callback for the scene dropdown — also persists `lastSceneId` |
+| `sceneModeToggle` | all | — | UI callback for the Static/Dynamic button |
+| `signal` | all | `sig, duration_ms, colors` | Signalling effect on all group lights (see below) |
 
 ---
 
@@ -345,3 +374,12 @@ The `typeOverrides` setting only applies when the child device is first created.
 
 **Scene dropdown is empty on a Room/Zone device**  
 Scenes are loaded at startup. If you added scenes to the Hue app after the QuickApp started, press **Restart** to reload them.
+
+**A dimmable light shows as off when set to 1 % in the Hue app**  
+Fixed in v0.2.16+. At its lowest dim step the Hue bridge can send `dimming.brightness` values < 0.5 which would round to 0 and force HC3 to display the light as off. Yahue now clamps such values to 1.
+
+**HC3 setColorTemperature returns an error from the bridge (`mirek > 500`)**  
+Fixed in v0.2.20+. HC3's standard `setColorTemperature` action passes a Kelvin value; Yahue now converts to Hue mirek (clamped to 153–500). Values ≤ 1000 are treated as already-mirek for backward compatibility.
+
+**A room/zone child created on an older Yahue version is missing the new scene/mode UI**  
+On upgrade to v0.2.18+ Yahue compares each room/zone child's stored UI version against the current definition. If they differ, the child is recreated with the new layout (UID is preserved, but per-child QA variables such as `scene`, `lastSceneId` and `sceneMode` are reset). The QA restarts automatically after the recreate cycle.

@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.21"
+local VERSION = "0.2.22"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -51,6 +51,24 @@ local devProps = {
 
 local defClasses
 local classesLoaded = false
+
+-- Inspects a Hue room/zone resource and picks the QA class to use based on
+-- the capabilities of its grouped_light service:
+--   color present                              -> RoomZoneQA       (colorController)
+--   color_temperature present (no color)       -> RoomZoneQA       (colorController, CT only)
+--   dimming present (no color, no CT)          -> RoomZoneDimQA    (multilevelSwitch)
+--   none of the above                          -> RoomZoneSwitchQA (binarySwitch)
+local function pickRoomZoneClass(roomId)
+  local res = HUE:getResource(roomId)
+  if not res then return "RoomZoneQA" end
+  local gsvc = res.findServiceByType and res:findServiceByType('grouped_light')[1]
+  local r = gsvc and gsvc.rsrc
+  if not r then return "RoomZoneQA" end
+  if r.color then return "RoomZoneQA" end
+  if r.color_temperature then return "RoomZoneQA" end
+  if r.dimming then return "RoomZoneDimQA" end
+  return "RoomZoneSwitchQA"
+end
 
 -- Builds the children descriptor table expected by initChildren/loadExistingChildren.
 -- ddevices: map of tag → {name, id, class} from HUE:app() discovery.
@@ -112,11 +130,11 @@ function HUE:app()
   end
   for id,zr in pairs(HUE:getResourceType('zone')) do
     local tag = "RoomZoneQA:"..id
-    ddevices[tag] = { name=zr.name or tag, id=id, class="RoomZoneQA" }
+    ddevices[tag] = { name=zr.name or tag, id=id, class=pickRoomZoneClass(id) }
   end
   for id,zr in pairs(HUE:getResourceType('room')) do
     local tag = "RoomZoneQA:"..id
-    ddevices[tag] = { name=zr.name or tag, id=id, class="RoomZoneQA" }
+    ddevices[tag] = { name=zr.name or tag, id=id, class=pickRoomZoneClass(id) }
   end
   for id,_ in pairs(HUE:getResourceType('motion_area_configuration')) do
     local dev = HUE:getResource(id)
@@ -758,10 +776,14 @@ function defClasses()
   -- ─────────────────────────────────────────────────────────────────────────
   class 'RoomZoneQA'(HueClass)
   RoomZoneQA.htype = "com.fibaro.colorController"
+  -- Capability flags. Subclasses (RoomZoneDimQA, RoomZoneSwitchQA) override
+  -- these to skip color/CT subscriptions and to emit the right value type.
+  RoomZoneQA.hasColor = true
+  RoomZoneQA.hasDim   = true
   -- Bump this whenever RoomZoneQA.annotate's UI table changes; existing
   -- children with a lower stored uiVersion will be patched in place at
   -- startup and the QA will restart once.
-  RoomZoneQA.uiVersion = 3
+  RoomZoneQA.uiVersion = 4
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
@@ -823,14 +845,18 @@ function defClasses()
       -- never write value=0 while anyOn is true. Restore from lastVal when
       -- coming back on with no current brightness.
       if anyOn then
-        local cur = tonumber(self.properties.value) or 0
-        if cur <= 0 then
-          self:updateProperty("value", self.lastVal or 100)
+        if self.hasDim then
+          local cur = tonumber(self.properties.value) or 0
+          if cur <= 0 then
+            self:updateProperty("value", self.lastVal or 100)
+          end
+        else
+          self:updateProperty("value", true)
         end
       else
-        self:updateProperty("value", 0)
+        self:updateProperty("value", self.hasDim and 0 or false)
       end
-      aggregateColor()
+      if self.hasColor then aggregateColor() end
     end
 
     for _,c in pairs(self.dev.children or {}) do
@@ -856,47 +882,51 @@ function defClasses()
       -- (if any) so we can read color/CT/dimming for the colour ring.
       -- Keying by the service id matches the `on` event source above.
       local lightSvc = c.findServiceByType and c:findServiceByType('light')[1]
-      if lightSvc then
+      if lightSvc and (self.hasColor or self.hasDim) then
         local svcId = lightSvc.id
-        lightSvc:subscribe("color",function(key,value,_)
-          if not (value and value.x) then return end
-          local r,g,b0 = HUE:xyToRgb(value.x, value.y, 100)
-          self:print("member %s color %d,%d,%d", svcId:sub(1,8), r,g,b0)
-          memberXY[svcId] = {r,g,b0}
-          aggregateColor()
-        end)
-        lightSvc:subscribe("color_temperature",function(key,value,_)
-          if not value then return end
-          local mirek = type(value)=='table' and value.mirek or value
-          if type(mirek) ~= 'number' then return end
-          local r,g,b0 = HUE:mirekToRgb(mirek)
-          self:print("member %s ct %s -> %d,%d,%d", svcId:sub(1,8), mirek, r,g,b0)
-          memberCT[svcId] = {r,g,b0}
-          aggregateColor()
-        end)
-        lightSvc:subscribe("dimming",function(key,value,_)
-          if type(value) == 'number' and value > 0 then
-            memberBri[svcId] = value
+        if self.hasColor then
+          lightSvc:subscribe("color",function(key,value,_)
+            if not (value and value.x) then return end
+            local r,g,b0 = HUE:xyToRgb(value.x, value.y, 100)
+            self:print("member %s color %d,%d,%d", svcId:sub(1,8), r,g,b0)
+            memberXY[svcId] = {r,g,b0}
             aggregateColor()
-            -- Aggregate the room's displayed brightness as the average of
-            -- members currently on. Hue scene recalls update per-member
-            -- brightness without sending a new grouped_light dimming event,
-            -- so without this the QA would show the previous scene's value.
-            local sum, n = 0, 0
-            for sid, bri in pairs(memberBri) do
-              if devsons[sid] and bri and bri > 0 then
-                sum = sum + bri; n = n + 1
+          end)
+          lightSvc:subscribe("color_temperature",function(key,value,_)
+            if not value then return end
+            local mirek = type(value)=='table' and value.mirek or value
+            if type(mirek) ~= 'number' then return end
+            local r,g,b0 = HUE:mirekToRgb(mirek)
+            self:print("member %s ct %s -> %d,%d,%d", svcId:sub(1,8), mirek, r,g,b0)
+            memberCT[svcId] = {r,g,b0}
+            aggregateColor()
+          end)
+        end
+        if self.hasDim then
+          lightSvc:subscribe("dimming",function(key,value,_)
+            if type(value) == 'number' and value > 0 then
+              memberBri[svcId] = value
+              if self.hasColor then aggregateColor() end
+              -- Aggregate the room's displayed brightness as the average of
+              -- members currently on. Hue scene recalls update per-member
+              -- brightness without sending a new grouped_light dimming event,
+              -- so without this the QA would show the previous scene's value.
+              local sum, n = 0, 0
+              for sid, bri in pairs(memberBri) do
+                if devsons[sid] and bri and bri > 0 then
+                  sum = sum + bri; n = n + 1
+                end
+              end
+              if n > 0 then
+                local avg = math.max(1, ROUND(sum / n))
+                self.lastVal = avg
+                if self.properties.state then
+                  self:updateProperty("value", avg)
+                end
               end
             end
-            if n > 0 then
-              local avg = math.max(1, ROUND(sum / n))
-              self.lastVal = avg
-              if self.properties.state then
-                self:updateProperty("value", avg)
-              end
-            end
-          end
-        end)
+          end)
+        end
         -- Publish the light service so the colour/CT/dimming subscriptions
         -- fire with current state at startup. Device:publishAll only emits
         -- the device's own props, not its services'.
@@ -933,19 +963,25 @@ function defClasses()
     if restore <= 0 then restore = 100 end
     self.lastVal = restore
     self:print("Turn on (restore %s%%)", restore)
-    self:updateProperty("value", restore)
+    if self.hasDim then
+      self:updateProperty("value", restore)
+    else
+      self:updateProperty("value", true)
+    end
     self:updateProperty("state", true)
     local sceneName = type(sceneArg)=='string' and sceneArg or self:getVar("scene")
     local scene = HUE:getSceneByName(sceneName,self.dev.name)
     if sceneName and not scene then self:print("Scene %s not found",sceneName) end
     if not scene then
       -- Send dimming together with on so Hue uses our brightness instead of
-      -- the bridge's per-group default (often ~50%).
-      self.group:sendCmd({
+      -- the bridge's per-group default (often ~50%). Skip dimming for
+      -- on/off-only groups (Hue rejects unknown fields).
+      local cmd = {
         on = {on = true},
-        dimming = {brightness = restore},
         dynamics = self.transition and self.transition > 0 and {duration = self.transition} or nil,
-      })
+      }
+      if self.hasDim then cmd.dimming = {brightness = restore} end
+      self.group:sendCmd(cmd)
     else
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
       self:print("Turn on Scene %s (%s)", scene.name, dynamic and "dynamic" or "static")
@@ -959,7 +995,7 @@ function defClasses()
     -- subsequent turnOn restores to the same level.
     local cur = tonumber(self.properties.value) or 0
     if cur > 0 then self.lastVal = cur end
-    self:updateProperty("value", 0)
+    self:updateProperty("value", self.hasDim and 0 or false)
     self:updateProperty("state", false)
     self.group:turnOff(self.transition)
   end
@@ -1056,5 +1092,42 @@ function defClasses()
       {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
     })
   end
-  
+
+  -- ─────────────────────────────────────────────────────────────────────────
+  -- RoomZoneDimQA  →  com.fibaro.multilevelSwitch
+  -- For room/zone groups whose lights are dimmable but support neither color
+  -- nor color_temperature.
+  -- ─────────────────────────────────────────────────────────────────────────
+  class 'RoomZoneDimQA'(RoomZoneQA)
+  RoomZoneDimQA.htype    = "com.fibaro.multilevelSwitch"
+  RoomZoneDimQA.hasColor = false
+  RoomZoneDimQA.hasDim   = true
+  RoomZoneDimQA.uiVersion = 4
+  function RoomZoneDimQA.annotate(rsrc)
+    rsrc.interfaces = rsrc.interfaces or {}
+    table.insert(rsrc.interfaces,"levelChange")
+    rsrc.UI = rsrc.UI or {}
+    table.insert(rsrc.UI, {
+      {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}},
+      {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
+    })
+  end
+
+  -- ─────────────────────────────────────────────────────────────────────────
+  -- RoomZoneSwitchQA  →  com.fibaro.binarySwitch
+  -- For room/zone groups whose lights are on/off only (no dimming).
+  -- ─────────────────────────────────────────────────────────────────────────
+  class 'RoomZoneSwitchQA'(RoomZoneQA)
+  RoomZoneSwitchQA.htype    = "com.fibaro.binarySwitch"
+  RoomZoneSwitchQA.hasColor = false
+  RoomZoneSwitchQA.hasDim   = false
+  RoomZoneSwitchQA.uiVersion = 4
+  function RoomZoneSwitchQA.annotate(rsrc)
+    rsrc.UI = rsrc.UI or {}
+    table.insert(rsrc.UI, {
+      {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}},
+      {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
+    })
+  end
+
 end
