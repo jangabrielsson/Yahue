@@ -1,10 +1,11 @@
 do
-  local VERSION = "2.6.3"
+  local VERSION = "2.6.4"
 
   print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
   local classID = 'ClassName'
   local callbacksID = 'uiCallbacks'
+  local uiVersionID = 'uiVersion'
   
   function QuickApp:initChildDevices() end
   QuickApp.children = {}
@@ -175,7 +176,7 @@ do
     self._sid = tonumber(tostring(uid):match("(%d+)$"))
   end
   
-  function QuickApp:_createChildDevice(uid, props, className)
+  function QuickApp:_createChildDevice(uid, props, className, uiVersion)
     __assert_type(props, 'table')
     local store = props.store or {}
     local room = props.room
@@ -195,6 +196,13 @@ do
     for k,v in pairs(store) do 
       setVar(device.id,k,v,true)
     end
+    -- Stamp uiVersion BEFORE invoking the class constructor. If __init
+    -- throws, we still want the new uiVersion stamped on the device so the
+    -- next startup does not see a stale version, delete-recreate, and loop
+    -- forever.
+    if uiVersion ~= nil then
+      setVar(device.id, uiVersionID, tonumber(uiVersion) or 0, true)
+    end
     if room then api.put("/devices/"..device.id,{roomID=room}) end
     local deviceClass = _G[className] or QuickAppChild
     local child = deviceClass(device)
@@ -205,7 +213,7 @@ do
   
   local allChildren = {} 
 
-  function QuickApp:createChild(uid,props,className,UI)
+  function QuickApp:createChild(uid,props,className,UI,uiVersion)
     if type(uid)~='string' then error(":createChild: uid must be string") end
     if type(className)~='string' then error(":createChild: Missing className") end
     ---@diagnostic disable-next-line: lowercase-global
@@ -238,7 +246,7 @@ do
       props.initialProperties.uiCallbacks = uiCallbacks
     end
     UID = uid
-    local c = self:_createChildDevice(uid,props,className)
+    local c = self:_createChildDevice(uid,props,className,uiVersion)
     UID = nil
     if not c then return end
     DEBUGF("Created new child ID:%s, UID:'%s'",c.id,uid)
@@ -254,8 +262,6 @@ do
     end
     return map
   end
-
-  local uiVersionID = 'uiVersion'
 
   -- Returns true if the child needs its UI replaced (def has a higher
   -- uiVersion than the value stamped on the existing child device).
@@ -358,11 +364,11 @@ do
         -- batch. Otherwise a stale-uiVersion delete + failed create would
         -- leave _uiPatched=true with remaining stale children, restart, and
         -- loop forever. Log the offending UID and continue with the rest.
+        -- uiVersion is stamped inside _createChildDevice immediately after
+        -- api.post (BEFORE the class constructor runs), so even if __init
+        -- throws we will not delete-recreate this child on next restart.
         local ok, err = pcall(function()
-          local child = self:createChild(uid,props,className,UI)
-          if child and ch.data.uiVersion then
-            child:internalStorageSet(uiVersionID, tonumber(ch.data.uiVersion) or 0)
-          end
+          self:createChild(uid,props,className,UI,ch.data.uiVersion)
         end)
         if not ok then
           ERRORF("createMissingChildren: UID:'%s' %s", uid, tostring(err))
