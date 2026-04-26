@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.2.26] - 2026-04-26
+
+## Changes in v0.2.26
+
+- ✨ **Feature**: fix(qwikchild): stamp uiVersion before child constructor to prevent restart loop
+  - Root cause of v0.2.23-v0.2.25 Entrance restart loop: when a stale-uiVersion
+  - child was deleted and recreated, the new uiVersion was stamped only AFTER
+  - the class constructor returned. If __init threw, the child existed but had
+  - no uiVersion -> next startup detected stale UI -> deleted/recreated ->
+  - __init threw again -> _uiPatched=true -> restart in 5s -> infinite loop.
+  - Move setVar(uiVersionID,...) inside _createChildDevice immediately after
+  - api.post/createChildDevice and before deviceClass(device). Now even if
+  - __init throws, the new uiVersion is persisted and the next startup will
+  - not delete-recreate this child.
+  - Also bump qwikchild VERSION to 2.6.4.
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.25] - 2026-04-26
 
 ## Changes in v0.2.25
