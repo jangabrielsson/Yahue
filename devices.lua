@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.23"
+local VERSION = "0.2.24"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -860,11 +860,28 @@ function defClasses()
     end
 
     for _,c in pairs(self.dev.children or {}) do
+      -- Wrap the entire per-member setup in pcall: a single broken member
+      -- (stale rid, non-light device like a wall switch / dimmer button,
+      -- malformed service list, ...) must not abort __init, otherwise the
+      -- child is created but scenes never load and subscriptions are
+      -- partial. Surface the failure as a warning and continue.
+      local ok_m, err_m = pcall(function()
       c = HUE:_resolve(c)
-      if c.type ~= 'device' then
+      if c and c.type and c.type ~= 'device' then
         c = HUE:_resolve(c.owner)
       end
+      -- Stale/dangling member reference (light or device removed from Hue
+      -- but still listed in the zone's children). _resolve returns a stub
+      -- without .id, so getResource yields nil. Skip rather than crash.
+      if not (c and c.id) then
+        self:warning("skipping stale zone/room member reference")
+        return
+      end
       c = HUE:getResource(c.id)
+      if not c then
+        self:warning("skipping unresolvable zone/room member")
+        return
+      end
       statuses[c.id] = true
       local memberId = c.id
       c:subscribe("status",function(key,value,b)
@@ -936,6 +953,10 @@ function defClasses()
 
       local c0 = c
       setTimeout(function() c0:publishAll() end, 0)
+      end)  -- end pcall per-member
+      if not ok_m then
+        self:warning("member init failed: %s", tostring(err_m))
+      end
     end
 
     -- NOTE: we deliberately do NOT subscribe to the grouped_light `dimming`,
