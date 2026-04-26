@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.24"
+local VERSION = "0.2.25"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -785,10 +785,19 @@ function defClasses()
   -- startup and the QA will restart once.
   RoomZoneQA.uiVersion = 4
   function RoomZoneQA:__init(device)
-    HueClass.__init(self,device)
-    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
-    self.transition = tonumber(self:getVariable("transition")) or 0
-    self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
+    -- Stage helper: each phase is wrapped in pcall and tagged so a nil-call
+    -- failure on HC3 (where debug.traceback is unavailable) is localised.
+    local function stage(name, fn)
+      local ok, err = pcall(fn)
+      if not ok then self:warning("__init stage '%s' failed: %s", name, tostring(err)) end
+    end
+    stage("HueClass.__init", function() HueClass.__init(self,device) end)
+    self:print("RoomZoneQA __init start uid=%s", tostring(self.uid))
+    stage("setup", function()
+      self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+      self.transition = tonumber(self:getVariable("transition")) or 0
+      self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
+    end)
 
     -- Per-member aggregation state. The Hue `grouped_light` resource does not
     -- reliably emit `on` events when only individual member lights change,
@@ -965,11 +974,15 @@ function defClasses()
     -- one red + one off light), and dimming emits transient mid-fade values.
     -- The room's value/color are derived from per-member subscriptions above.
 
-    self.dev:publishAll()
-    loadScenesForRoom(self)
-    -- restore the saved scene mode label (default static)
-    local mode = self:getVariable("sceneMode") == "dynamic" and "Dynamic" or "Static"
-    self:updateView("sceneMode", "text", mode)
+    -- Each post-loop phase wrapped in pcall with the stage helper defined
+    -- above. The child still completes init even if one phase fails; the
+    -- error is surfaced as a warning naming the failing phase.
+    stage("publishAll", function() self.dev:publishAll() end)
+    stage("loadScenes", function() loadScenesForRoom(self) end)
+    stage("sceneMode",  function()
+      local mode = self:getVariable("sceneMode") == "dynamic" and "Dynamic" or "Static"
+      self:updateView("sceneMode", "text", mode)
+    end)
   end
   
   -- Stores a Hue scene name in the QA variable 'scene' for use by turnOn().
