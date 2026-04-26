@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.20] - 2026-04-26
+
+## Changes in v0.2.20
+
+- ✨ **Feature**: update version to 0.2.20 and add kelvin to mirek conversion in devices.lua
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.19] - 2026-04-26
 
 ## Changes in v0.2.19
