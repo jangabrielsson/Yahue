@@ -1,5 +1,5 @@
 do
-  local VERSION = "2.6.1"
+  local VERSION = "2.6.2"
 
   print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
@@ -257,43 +257,19 @@ do
 
   local uiVersionID = 'uiVersion'
 
-  -- Patches an existing child's uiView/uiCallbacks in place when its
-  -- def.uiVersion is newer than the version stored on the child. Returns
-  -- true if a patch was applied (caller should schedule a QA restart so
-  -- HC3 picks up the new layout reliably).
-  local function maybePatchUI(self, childObject, def)
+  -- Returns true if the child needs its UI replaced (def has a higher
+  -- uiVersion than the value stamped on the existing child device).
+  -- HC3 will not accept PUT /devices/<id> for QA child uiView; the only
+  -- reliable way to apply a new layout is to delete and recreate the
+  -- child on the same UID. We do that by deleting it here and letting
+  -- createMissingChildren create it fresh in the same startup pass.
+  local function uiNeedsReplace(child, def)
     if type(def) ~= 'table' then return false end
     if type(def.UI) ~= 'table' then return false end
     local newVer = tonumber(def.uiVersion) or 0
-    local curVer = tonumber(childObject:internalStorageGet(uiVersionID)) or 0
-    if newVer <= curVer then return false end
-    local ok,err = pcall(function()
-      local uiView = UI2NewUiView(def.UI)
-      local uiCallbacks = UI2uiCallbacks(def.UI)
-      -- updateProperty('uiView',...) is silently ignored by HC3; uiView and
-      -- uiCallbacks are part of the device record itself, not live props.
-      -- We must PUT the device with the new properties for HC3 to persist
-      -- and re-render the layout.
-      local _, status = api.put("/devices/"..childObject.id, {
-        properties = { uiView = uiView, uiCallbacks = uiCallbacks }
-      })
-      if status and status > 206 then
-        error(fmt("PUT /devices/%s -> %s", childObject.id, tostring(status)))
-      end
-      childObject.properties.uiView = uiView
-      childObject.properties.uiCallbacks = uiCallbacks
-      childObject.uiCallbacks = {}
-      if childObject.registerUICallbacks then childObject:registerUICallbacks() end
-      setVar(childObject.id, callbacksID, uiCallbacks, true)
-      childObject:internalStorageSet(uiVersionID, newVer)
-    end)
-    if not ok then
-      ERRORF("UI patch failed for child UID:'%s': %s", childObject._uid or '?', err)
-      return false
-    end
-    DEBUGF("Patched UI of child ID:%s, UID:'%s' (v%s -> v%s)",
-      childObject.id, childObject._uid or '?', curVer, newVer)
-    return true
+    local stored = getVar(child.id, uiVersionID)
+    local curVer = tonumber(stored) or 0
+    return newVer > curVer
   end
 
   local function loadExisting(self,childrenDefs)
@@ -304,24 +280,29 @@ do
     local cdevs,n,gerr = api.get("/devices?parentId="..self.id) or {},0,nil -- Pick up all my children
     for _,child in ipairs(cdevs) do
       local uid = getVar(child.id,childID)
-      if uid then allChildren[uid] = child.id end
-      if uid and (childrenDefs==nil or childrenDefs[uid]) then
-        local className = getVar(child.id,classID) or ""
-        DEBUGF("Loading existing child UID:'%s'",uid) 
-        local stat,err = pcall(function()
-          local deviceClass = _G[className] or QuickAppChild
-          local childObject = deviceClass(child) -- Init
-          self.childDevices[child.id] = childObject
-          childObject.parent = self
-          if childrenDefs and maybePatchUI(self, childObject, childrenDefs[uid]) then
-            self._uiPatched = true
+      if uid and childrenDefs and uiNeedsReplace(child, childrenDefs[uid]) then
+        DEBUGF("Child UID:'%s' has stale uiVersion - deleting for recreate", uid)
+        doChildRemovedHook(child.id)
+        api.delete("/plugins/removeChildDevice/" .. child.id)
+        self._uiPatched = true
+        -- skip: this UID will be created by createMissingChildren
+      elseif uid then
+        allChildren[uid] = child.id
+        if (childrenDefs==nil or childrenDefs[uid]) then
+          local className = getVar(child.id,classID) or ""
+          DEBUGF("Loading existing child UID:'%s'",uid)
+          local stat,err = pcall(function()
+            local deviceClass = _G[className] or QuickAppChild
+            local childObject = deviceClass(child) -- Init
+            self.childDevices[child.id] = childObject
+            childObject.parent = self
+          end)
+          if not stat then
+            ERRORF("loadExistingChildren:%s child ID:%s, UID:'%s'",err,child.id,uid)
+            gerr = err
+          else
+            n=n+1
           end
-        end)
-        if not stat then
-          ERRORF("loadExistingChildren:%s child ID:%s, UID:'%s'",err,child.id,uid)
-          gerr = err
-        else
-          n=n+1
         end
       end
     end
