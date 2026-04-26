@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.15"
+local VERSION = "0.2.16"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -50,12 +50,17 @@ local function buildChildren(ddevices, tags)
       local dev = HUE:getResource(data.id)
       if dev then
         local cls = _G[data.class]
+        local uiVer
+        if cls then
+          local ok, v = pcall(function() return cls.uiVersion end)
+          if ok then uiVer = v end
+        end
         children[tag] = {
           name = dev.name,
           type = HUE.typeOverrides[data.id] or (cls and cls.htype) or "com.fibaro.deviceController",
           className = data.class,
           interfaces = dev:getProps()['power_state'] and {'battery'} or nil,
-          uiVersion = cls and cls.uiVersion or nil,
+          uiVersion = uiVer,
         }
         if cls and cls.annotate then cls.annotate(children[tag]) end
       end
