@@ -1,5 +1,5 @@
 do
-  local VERSION = "2.6.0"
+  local VERSION = "2.6.1"
 
   print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
@@ -270,8 +270,17 @@ do
     local ok,err = pcall(function()
       local uiView = UI2NewUiView(def.UI)
       local uiCallbacks = UI2uiCallbacks(def.UI)
-      childObject:updateProperty('uiView', uiView)
-      childObject:updateProperty('uiCallbacks', uiCallbacks)
+      -- updateProperty('uiView',...) is silently ignored by HC3; uiView and
+      -- uiCallbacks are part of the device record itself, not live props.
+      -- We must PUT the device with the new properties for HC3 to persist
+      -- and re-render the layout.
+      local _, status = api.put("/devices/"..childObject.id, {
+        properties = { uiView = uiView, uiCallbacks = uiCallbacks }
+      })
+      if status and status > 206 then
+        error(fmt("PUT /devices/%s -> %s", childObject.id, tostring(status)))
+      end
+      childObject.properties.uiView = uiView
       childObject.properties.uiCallbacks = uiCallbacks
       childObject.uiCallbacks = {}
       if childObject.registerUICallbacks then childObject:registerUICallbacks() end

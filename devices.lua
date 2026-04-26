@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.16"
+local VERSION = "0.2.17"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -729,7 +729,7 @@ function defClasses()
   -- Bump this whenever RoomZoneQA.annotate's UI table changes; existing
   -- children with a lower stored uiVersion will be patched in place at
   -- startup and the QA will restart once.
-  RoomZoneQA.uiVersion = 1
+  RoomZoneQA.uiVersion = 2
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
