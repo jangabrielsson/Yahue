@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.18"
+local VERSION = "0.2.19"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -567,20 +567,29 @@ function defClasses()
     self.transition = tonumber(self:getVariable("transition")) or 0
     self.light = self.dev:findServiceByType('light')[1] or self.dev
     self.dev:subscribe("on",function(key,value,b)
-      self:print("on %s",value)
+      self:print("[diag v%s] on=%s -> state:=%s, value:=%s (lastVal=%s)",
+        VERSION, tostring(value), tostring(value),
+        tostring(value and (self.lastVal or 100) or 0), tostring(self.lastVal))
       self:updateProperty("state",value)
       if value then self:updateProperty("value",self.lastVal or 100)
       else self:updateProperty("value",0) end
     end)
     self.dev:subscribe("dimming",function(key,value,b)
-      self:print("dimming %s",value)
       -- Hue reports dimming=0 when the light is off; ignore so lastVal stays
       -- as the last positive brightness (HC3 forces state=false on value=0).
       -- Clamp to at least 1: at the lowest UI step Hue may send fractional
       -- values < 0.5 (e.g. 0.39 for "1%"), which would round to 0 and make
       -- HC3 display the dimmer as off even though the light is on.
-      if value > 0 then self.lastVal = math.max(1, ROUND(value)) end
-      if self.properties.state then
+      local prevLast = self.lastVal
+      if type(value)=='number' and value > 0 then
+        self.lastVal = math.max(1, ROUND(value))
+      end
+      local willWrite = self.properties.state
+      self:print("[diag v%s] dimming raw=%s state=%s lastVal:%s->%s %s",
+        VERSION, tostring(value), tostring(self.properties.state),
+        tostring(prevLast), tostring(self.lastVal),
+        willWrite and ("value:="..tostring(self.lastVal or 100)) or "(state=false, value not written)")
+      if willWrite then
         self:updateProperty("value",self.lastVal or 100)
       end
     end)
