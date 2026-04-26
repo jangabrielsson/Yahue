@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.26"
+local VERSION = "0.2.27"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -787,16 +787,30 @@ function defClasses()
   function RoomZoneQA:__init(device)
     -- Stage helper: each phase is wrapped in pcall and tagged so a nil-call
     -- failure on HC3 (where debug.traceback is unavailable) is localised.
+    -- Logging is via fibaro.debug (not self:*), because if HueClass.__init
+    -- partially failed self.pname / properties may be nil and self:warning
+    -- itself could raise — hiding the original error.
+    local devId = device and device.id or "?"
+    local tag = "RoomZoneQA:"..tostring(devId)
+    local function dbg(msg) pcall(fibaro.debug, tag, msg) end
     local function stage(name, fn)
+      dbg("[__init] enter stage='"..name.."'")
       local ok, err = pcall(fn)
-      if not ok then self:warning("__init stage '%s' failed: %s", name, tostring(err)) end
+      if not ok then
+        dbg("[__init] stage='"..name.."' FAILED: "..tostring(err))
+      else
+        dbg("[__init] stage='"..name.."' ok")
+      end
+      return ok
     end
+    dbg("[__init] BEGIN devId="..tostring(devId))
     stage("HueClass.__init", function() HueClass.__init(self,device) end)
-    self:print("RoomZoneQA __init start uid=%s", tostring(self.uid))
+    dbg("[__init] uid="..tostring(self.uid).." pname="..tostring(self.pname))
     stage("setup", function()
       self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
       self.transition = tonumber(self:getVariable("transition")) or 0
-      self.group = self.dev:findServiceByType('grouped_light')[1] or self.dev
+      local svcs = self.dev:findServiceByType('grouped_light')
+      self.group = (svcs and svcs[1]) or self.dev
     end)
 
     -- Per-member aggregation state. The Hue `grouped_light` resource does not
@@ -868,7 +882,8 @@ function defClasses()
       if self.hasColor then aggregateColor() end
     end
 
-    for _,c in pairs(self.dev.children or {}) do
+    dbg("[__init] enter member loop, children="..tostring(self.dev and self.dev.children and #(self.dev.children) or "?"))
+    for _,c in pairs(self.dev and self.dev.children or {}) do
       -- Wrap the entire per-member setup in pcall: a single broken member
       -- (stale rid, non-light device like a wall switch / dimmer button,
       -- malformed service list, ...) must not abort __init, otherwise the
@@ -964,9 +979,10 @@ function defClasses()
       setTimeout(function() c0:publishAll() end, 0)
       end)  -- end pcall per-member
       if not ok_m then
-        self:warning("member init failed: %s", tostring(err_m))
+        dbg("[__init] member init failed: "..tostring(err_m))
       end
     end
+    dbg("[__init] member loop done")
 
     -- NOTE: we deliberately do NOT subscribe to the grouped_light `dimming`,
     -- `color` or `color_temperature` events. Hue computes a group-level
