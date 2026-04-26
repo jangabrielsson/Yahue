@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.20"
+local VERSION = "0.2.21"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -225,6 +225,8 @@ function defClasses()
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
       self:print("Recall scene %s (%s)", sc.name, dynamic and "dynamic" or "static")
       sc:recall(nil, dynamic)
+      -- Persist as the last selected scene so the dropdown can be restored on next startup.
+      self:setVariable("lastSceneId", sceneId)
     end
   end
   -- Toggles the scene recall mode between static and dynamic. The button
@@ -294,6 +296,11 @@ function defClasses()
     end
     table.sort(options, function(a, b) return a.text < b.text end)
     child:updateView("sceneSelect", "options", options)
+    -- Restore the last selected scene id so the dropdown shows it.
+    local last = child:getVariable("lastSceneId")
+    if last and last ~= "" then
+      child:updateView("sceneSelect", "selectedItem", last)
+    end
   end
   
   -- ─────────────────────────────────────────────────────────────────────────
@@ -871,6 +878,23 @@ function defClasses()
           if type(value) == 'number' and value > 0 then
             memberBri[svcId] = value
             aggregateColor()
+            -- Aggregate the room's displayed brightness as the average of
+            -- members currently on. Hue scene recalls update per-member
+            -- brightness without sending a new grouped_light dimming event,
+            -- so without this the QA would show the previous scene's value.
+            local sum, n = 0, 0
+            for sid, bri in pairs(memberBri) do
+              if devsons[sid] and bri and bri > 0 then
+                sum = sum + bri; n = n + 1
+              end
+            end
+            if n > 0 then
+              local avg = math.max(1, ROUND(sum / n))
+              self.lastVal = avg
+              if self.properties.state then
+                self:updateProperty("value", avg)
+              end
+            end
           end
         end)
         -- Publish the light service so the colour/CT/dimming subscriptions
@@ -965,11 +989,12 @@ function defClasses()
     self.group:setDim(-1)
   end
   -- Sets color temperature. HC3 passes Kelvin; convert to Hue mirek.
+  -- Also turns the group on if currently off, so the user sees the change.
   function RoomZoneQA:setColorTemperature(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     local mirek = kelvinToMirek(value)
     self:print("setColorTemperature %s K -> %s mirek", tostring(value), mirek)
-    self.group:setTemperature(mirek)
+    self.group:sendCmd({on={on=true}, color_temperature={mirek=mirek}})
   end
   -- Sets color from RRGGBB hex string.
   function RoomZoneQA:setColor(r,g,b,w)
@@ -982,7 +1007,9 @@ function defClasses()
       return
     end
     local x,y = HUE:rgbToXy(r,g,b)
-    self.group:rawCmd({color={xy={x=x,y=y}}})
+    -- Turn on together with the colour change so the user sees the result
+    -- even if the group was off.
+    self.group:sendCmd({on={on=true}, color={xy={x=x,y=y}}})
     self:updateProperty("color",color)
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
   end
@@ -998,12 +1025,12 @@ function defClasses()
     local hasRGB = value.red ~= nil or value.green ~= nil or value.blue ~= nil
     if hasRGB and (self.group.rsrc and self.group.rsrc.color) then
       local x,y = HUE:rgbToXy(r,g,b)
-      self.group:rawCmd({color={xy={x=x,y=y}}})
+      self.group:sendCmd({on={on=true}, color={xy={x=x,y=y}}})
       local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
       self:updateProperty("color",color)
     elseif value.warmWhite ~= nil then
       local mirek = math.floor(153 + (w/255)*(454-153))
-      self.group:rawCmd({color_temperature={mirek=mirek}})
+      self.group:sendCmd({on={on=true}, color_temperature={mirek=mirek}})
       self:updateProperty("colorTemperature",mirek)
     end
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=w})
