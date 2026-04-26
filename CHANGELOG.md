@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.2.24] - 2026-04-26
+
+## Changes in v0.2.24
+
+- ✨ **Feature**: fix(devices): isolate per-member init in RoomZoneQA so a non-light member (switch/dimmer) cannot abort __init
+  - A room/zone may contain non-light devices (wall switches, dimmer
+  - switches, smart buttons). Previously a stale or unexpected member
+  - could throw 'attempt to call a nil value' inside RoomZoneQA:__init,
+  - which left the child created but with no scene dropdown and no
+  - subscriptions. Wrap the entire per-member setup in pcall and skip
+  - unresolvable members with a warning. Also revert qwikchild xpcall
+  - to plain pcall (HC3 strips debug.traceback).
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.23] - 2026-04-26
 
 ## Changes in v0.2.23
