@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.23] - 2026-04-26
+
+## Changes in v0.2.23
+
+- ✨ **Feature**: fix(qwikchild): per-child pcall in createMissing to break uiVersion restart loop; bump versions to 0.2.23 / qwikchild 2.6.3
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.22] - 2026-04-26
 
 ## Changes in v0.2.22
