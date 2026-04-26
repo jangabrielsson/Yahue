@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.2.28] - 2026-04-26
+
+## Changes in v0.2.28
+
+- ✨ **Feature**: chore: remove stray output.log
+- ✨ **Feature**: diag: log className resolution and constructor entry/exit in qwikchild
+  - The v0.2.27 fibaro.debug breadcrumbs in RoomZoneQA:__init produced no
+  - output for the reporter, suggesting the failure may be inside the class
+  - constructor lookup or before __init body runs. Add DEBUGF before/after
+  - the deviceClass(device) call in both _createChildDevice and
+  - loadExisting, logging className and whether _G[className] resolved.
+  - Also switch RoomZoneQA:__init breadcrumbs to quickApp:debug + raw print
+  - (belt-and-braces) so they cannot be silently dropped.
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.27] - 2026-04-26
 
 ## Changes in v0.2.27
