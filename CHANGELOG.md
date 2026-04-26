@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.2.25] - 2026-04-26
+
+## Changes in v0.2.25
+
+- ✨ **Feature**: diag(devices): tag each RoomZoneQA __init phase with stage helper
+  - Wrap HueClass.__init / setup / publishAll / loadScenes / sceneMode
+  - phases in pcall with a stage tag. HC3 strips debug.traceback so this
+  - is the only way to localise an 'attempt to call a nil value' to a
+  - specific phase. Also adds a startup print with the room uid so the
+  - failing room is identifiable in mixed logs. The child still completes
+  - init even if one phase fails.
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.24] - 2026-04-26
 
 ## Changes in v0.2.24
