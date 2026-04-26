@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.27"
+local VERSION = "0.2.28"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -792,7 +792,13 @@ function defClasses()
     -- itself could raise — hiding the original error.
     local devId = device and device.id or "?"
     local tag = "RoomZoneQA:"..tostring(devId)
-    local function dbg(msg) pcall(fibaro.debug, tag, msg) end
+    -- Use both quickApp:debug (visible in HC3 console) and print (raw stdout)
+    -- so the breadcrumb is impossible to lose. fibaro.debug was tried in
+    -- v0.2.27 but produced no output for the reporter — switch belt-and-braces.
+    local function dbg(msg)
+      pcall(function() quickApp:debug(tag, msg) end)
+      pcall(print, tag, msg)
+    end
     local function stage(name, fn)
       dbg("[__init] enter stage='"..name.."'")
       local ok, err = pcall(fn)
