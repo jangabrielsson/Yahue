@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.11"
+local VERSION = "0.2.12"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -558,7 +558,10 @@ function defClasses()
       self:print("dimming %s",value)
       -- Hue reports dimming=0 when the light is off; ignore so lastVal stays
       -- as the last positive brightness (HC3 forces state=false on value=0).
-      if value > 0 then self.lastVal = ROUND(value) end
+      -- Clamp to at least 1: at the lowest UI step Hue may send fractional
+      -- values < 0.5 (e.g. 0.39 for "1%"), which would round to 0 and make
+      -- HC3 display the dimmer as off even though the light is on.
+      if value > 0 then self.lastVal = math.max(1, ROUND(value)) end
       if self.properties.state then
         self:updateProperty("value",self.lastVal or 100)
       end

@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.56
+local _version_e = 0.58
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -867,14 +867,14 @@ local function main()
         local data = json.decode(res.data)
         handle_events(data)
       end)
-      if not ok then ERROR("/eventstream parse: %s", tostring(err)) end
+      if not ok then WARNING("/eventstream parse: %s", tostring(err)) end
       getw()
     end
     function args.error(err)
       local transient = err and (err:match("timed out") or err == "wantread")
       if not transient then
         local d = bumpBackoff()
-        ERROR("/eventstream: %s (retry in %dms)", err, d)
+        WARNING("/eventstream: %s (retry in %dms)", err, d)
         setTimeout(getw, d)
       else
         getw()
@@ -888,14 +888,16 @@ local function main()
     local getw
     local eurl = url.."/eventstream/clip/v2"
     local backoff = 0   -- ms; grows on consecutive errors, reset on success
-    -- Watchdog: the SSE TCP socket can go silently half-dead (router NAT
-    -- timeout, Wi-Fi blip, bridge restart) so neither success nor error
+    -- Watchdog: the SSE TCP socket can in theory go silently half-dead (router
+    -- NAT timeout, Wi-Fi blip, bridge restart) so neither success nor error
     -- ever fires again. Hue sends a `: hi` keep-alive at least every ~30s,
     -- so if we see nothing for WATCHDOG_MS we force a reconnect.
-    -- Configurable via QA variable `sseWatchdog` (seconds), default 300s.
-    -- Set to 0 to disable. Reconnecting a healthy SSE stream just churns
-    -- the bridge's connection table, so keep this generous.
-    local watchdogSec = tonumber(quickApp:getVariable("sseWatchdog")) or 300
+    -- Disabled by default (sseWatchdog=0). Earlier "silent stoppage" reports
+    -- turned out to be the assert-in-delete bug, not actually-dead sockets,
+    -- and reconnecting a healthy SSE stream just churns the bridge.
+    -- Set the QA variable `sseWatchdog` to a number of seconds (e.g. 300) to
+    -- enable.
+    local watchdogSec = tonumber(quickApp:getVariable("sseWatchdog")) or 0
     local WATCHDOG_MS = watchdogSec * 1000
     local lastSeen = 0
     local watchdogRef
@@ -950,7 +952,7 @@ local function main()
       end)
       if not stat then
         local d = bumpBackoff()
-        ERROR("/eventstream parse: %s (retry in %dms)", tostring(err), d)
+        WARNING("/eventstream parse: %s (retry in %dms)", tostring(err), d)
         setTimeout(getw, d)
       end
     end
@@ -958,7 +960,7 @@ local function main()
       local transient = err == "timeout" or err == "wantread"
       if not transient then
         local d = bumpBackoff()
-        ERROR("/eventstream: %s (retry in %dms)", err, d)
+        WARNING("/eventstream: %s (retry in %dms)", err, d)
         setTimeout(getw, d)
       else
         getw()
@@ -1100,13 +1102,16 @@ local function main()
   
   fibaro.event({type='REFRESH_RESOURCES'},function(_) hueGET("/clip/v2/resource",'REFRESHED_RESOURCES') end)
   
+  local refreshBackoff = err_retry
   fibaro.event({type='REFRESHED_RESOURCES'},function(ev)
     if ev.error then
-      ERROR("/clip/v2/resource %s",ev.error)
-      ERROR("Retry in %ss",err_retry)
-      post({type='REFRESH_RESOURCES'},1000*err_retry)
+      WARNING("/clip/v2/resource %s",ev.error)
+      WARNING("Retry in %ss",refreshBackoff)
+      post({type='REFRESH_RESOURCES'},1000*refreshBackoff)
+      refreshBackoff = math.min(refreshBackoff * 2, 60)
       return
     end
+    refreshBackoff = err_retry
     for _,r in pairs(resources.id2resource) do
       r._dirty = true
     end
