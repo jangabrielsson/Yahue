@@ -1,0 +1,18 @@
+Detected host IP: 192.168.50.188
+[2;37m╭──────────────────────────────────────────────────────────────────────────────╮[0m
+[2;37m│[0m [97m🚀 PLua version [0m[1;36m1.3.3[0m                                                        [2;37m│[0m
+[2;37m│[0m [32mPython:[0m[32m3.11.13[0m[2;37m, [0m[34mLua:[0m[34m5.4[0m                                                      [2;37m│[0m
+[2;37m│[0m [33mAPI:[0m[33m8080[0m                                                                     [2;37m│[0m
+[2;37m╰──────────────────────────────────────────────────────────────────────────────╯[0m
+[33mFibaro SDK, offline, (0.3440s)[0m
+[37m[26.04.2026][20:29:18][[32mDEBUG  [37m][YAHUE5555]: [37mQwikAppChild library v2.6.5[0m[0m
+[37m[26.04.2026][20:29:18][[32mDEBUG  [37m][YAHUE5555]: [37mYahueV2 0.2.29[0m[0m
+[37m[26.04.2026][20:29:18][[32mDEBUG  [37m][YAHUE5555]: [37mHUEv2Engine v0.61[0m[0m
+[37m[26.04.2026][20:29:18][[32mDEBUG  [37m][YAHUE5555]: [37mHub url: https://192.168.50.56[0m[0m
+[37m[26.04.2026][20:29:18][[32mDEBUG  [37m][YAHUE5555]: [37mV2 api available (2071294020)[0m[0m
+[37m[26.04.2026][20:29:19][[33mWARNING[37m][YAHUE5555]: [37mMissing resource type:clip (further events for this type will be ignored)[0m[0m
+[37m[26.04.2026][20:29:19][[33mWARNING[37m][YAHUE5555]: [37mMissing resource type:grouped_light_level (further events for this type will be ignored)[0m[0m
+[37m[26.04.2026][20:29:19][[33mWARNING[37m][YAHUE5555]: [37mMissing resource type:grouped_motion (further events for this type will be ignored)[0m[0m
+[37m[26.04.2026][20:29:19][[32mDEBUG  [37m][YAHUE5555]: [37mDefining QA classes[0m[0m
+[37m[26.04.2026][20:29:19][[33mWARNING[37m][YAHUE5555]: [37mRecommend to have a state file for remembering children between runs in offline mode[0m[0m
+[37m[26.04.2026][20:29:21][[32mDEBUG  [37m][PLUA]: [37mExit[0m[0m

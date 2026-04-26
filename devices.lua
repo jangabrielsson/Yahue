@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.28"
+local VERSION = "0.2.29"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -1159,6 +1159,11 @@ function defClasses()
   RoomZoneDimQA.hasColor = false
   RoomZoneDimQA.hasDim   = true
   RoomZoneDimQA.uiVersion = 4
+  -- Fibaro's `class` system looks up __init via rawget on the subclass
+  -- itself (it does not walk __index), so a subclass without its own
+  -- __init raises "attempt to call a nil value" at construction time.
+  -- Always delegate explicitly to the parent.
+  function RoomZoneDimQA:__init(device) RoomZoneQA.__init(self, device) end
   function RoomZoneDimQA.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
     table.insert(rsrc.interfaces,"levelChange")
@@ -1178,6 +1183,9 @@ function defClasses()
   RoomZoneSwitchQA.hasColor = false
   RoomZoneSwitchQA.hasDim   = false
   RoomZoneSwitchQA.uiVersion = 4
+  -- See RoomZoneDimQA above: explicit __init delegator is required by
+  -- Fibaro's class system (no __index walk for __init).
+  function RoomZoneSwitchQA:__init(device) RoomZoneQA.__init(self, device) end
   function RoomZoneSwitchQA.annotate(rsrc)
     rsrc.UI = rsrc.UI or {}
     table.insert(rsrc.UI, {
