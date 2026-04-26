@@ -1,5 +1,24 @@
 # Changelog
 
+## [v0.2.29] - 2026-04-26
+
+## Changes in v0.2.29
+
+- ✨ **Feature**: chore: remove stray output logs
+- 🐛 **Fix**: explicit __init delegators on RoomZoneDimQA/RoomZoneSwitchQA
+  - Fibaro's class system resolves __init via rawget on the subclass (no
+  - __index walk), so a subclass without its own __init raises 'attempt to
+  - call a nil value' at construction time before any inherited body runs.
+  - RoomZoneDimQA and RoomZoneSwitchQA were the only two subclasses in the
+  - codebase that omitted __init, relying on inheriting RoomZoneQA:__init.
+  - This caused dim-only and on/off-only rooms to fail to instantiate (loop
+  - broken in v0.2.26 by stamping uiVersion before constructor; this commit
+  - fixes the actual constructor failure).
+  - Add explicit delegators that call RoomZoneQA.__init(self, device).
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.28] - 2026-04-26
 
 ## Changes in v0.2.28
