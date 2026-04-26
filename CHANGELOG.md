@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.13] - 2026-04-26
+
+## Changes in v0.2.13
+
+- 🐛 **Fix**: correct proxy configuration in Yahue.lua
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.12] - 2026-04-26
 
 ## Changes in v0.2.12
