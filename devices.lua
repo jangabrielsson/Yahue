@@ -55,6 +55,7 @@ local function buildChildren(ddevices, tags)
           type = HUE.typeOverrides[data.id] or (cls and cls.htype) or "com.fibaro.deviceController",
           className = data.class,
           interfaces = dev:getProps()['power_state'] and {'battery'} or nil,
+          uiVersion = cls and cls.uiVersion or nil,
         }
         if cls and cls.annotate then cls.annotate(children[tag]) end
       end
@@ -195,14 +196,26 @@ function defClasses()
     __TAG = TAG
   end
   -- Recalls the Hue scene whose ID is in event.values[1] (from sceneSelect dropdown).
+  -- Honours the per-child sceneMode ('static' or 'dynamic'), toggled via the
+  -- 'sceneMode' button in the UI.
   function HueClass:sceneChanged(event)
     local sceneId = event.values[1]
     if not sceneId or sceneId == '' then return end
     local sc = HUE:getResource(sceneId)
     if sc then
-      self:print("Recall scene %s", sc.name)
-      sc:recall()
+      local dynamic = (self:getVariable("sceneMode") == "dynamic")
+      self:print("Recall scene %s (%s)", sc.name, dynamic and "dynamic" or "static")
+      sc:recall(nil, dynamic)
     end
+  end
+  -- Toggles the scene recall mode between static and dynamic. The button
+  -- label is updated to reflect the new mode and the choice is persisted in
+  -- the QA variable 'sceneMode'.
+  function HueClass:sceneModeToggle()
+    local mode = self:getVariable("sceneMode") == "dynamic" and "static" or "dynamic"
+    self:setVariable("sceneMode", mode)
+    self:updateView("sceneMode", "text", mode == "dynamic" and "Dynamic" or "Static")
+    self:print("Scene mode: %s", mode)
   end
   -- Triggers a signaling effect on the light or group.
   -- sig:        "on_off"        – blink max brightness / off (no color needed)
@@ -708,6 +721,10 @@ function defClasses()
   -- ─────────────────────────────────────────────────────────────────────────
   class 'RoomZoneQA'(HueClass)
   RoomZoneQA.htype = "com.fibaro.colorController"
+  -- Bump this whenever RoomZoneQA.annotate's UI table changes; existing
+  -- children with a lower stored uiVersion will be patched in place at
+  -- startup and the QA will restart once.
+  RoomZoneQA.uiVersion = 1
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
@@ -845,6 +862,9 @@ function defClasses()
 
     self.dev:publishAll()
     loadScenesForRoom(self)
+    -- restore the saved scene mode label (default static)
+    local mode = self:getVariable("sceneMode") == "dynamic" and "Dynamic" or "Static"
+    self:updateView("sceneMode", "text", mode)
   end
   
   -- Stores a Hue scene name in the QA variable 'scene' for use by turnOn().
@@ -873,8 +893,9 @@ function defClasses()
         dynamics = self.transition and self.transition > 0 and {duration = self.transition} or nil,
       })
     else
-      self:print("Turn on Scene %s",scene.name)
-      scene:recall()
+      local dynamic = (self:getVariable("sceneMode") == "dynamic")
+      self:print("Turn on Scene %s (%s)", scene.name, dynamic and "dynamic" or "static")
+      scene:recall(nil, dynamic)
     end
   end
   -- Turns the entire group off.
@@ -969,7 +990,10 @@ function defClasses()
     rsrc.properties = rsrc.properties or {}
     rsrc.properties.colorComponents = {red=0,green=0,blue=0,warmWhite=0}
     rsrc.UI = rsrc.UI or {}
-    table.insert(rsrc.UI, {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}})
+    table.insert(rsrc.UI, {
+      {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}},
+      {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
+    })
   end
   
 end

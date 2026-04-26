@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.59
+local _version_e = 0.61
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -646,7 +646,10 @@ local function main()
     hueResource.__init(self,id)
     self._str = fmt("[scene:%s,%s]",self.id,self.name)
   end
-  function scene:recall(transition) self:sendCmd({recall = { action = "active",dynamics=transition and {duration=transition} or nil  }}) end
+  function scene:recall(transition, dynamic)
+    local action = dynamic and "dynamic_palette" or "active"
+    self:sendCmd({recall = { action = action, dynamics = transition and {duration=transition} or nil }})
+  end
   function scene:targetCmd(cmd)
     if not self.rsrc.group then return end
     local zoneroom = resolve(self.rsrc.group)

@@ -6,7 +6,7 @@
 --%%var:Hue_User=config.Hue_user
 --%%conceal:Hue_User="<Hue app key>"
 --%%file:engine.lua,Engine
---%%file:$fibaro.lib.qwikchild,qwickchild
+--%%file:qwikchild.lua,qwickchild
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
 --%%u:{label='info', text=''}
