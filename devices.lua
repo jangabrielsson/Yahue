@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.19"
+local VERSION = "0.2.20"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -13,6 +13,20 @@ HUE.appVersion = tostring(VERSION)
 
 -- Rounds a number to the nearest integer.
 local function ROUND(i) return math.floor(i+0.5) end
+
+-- HC3's setColorTemperature passes a Kelvin value (e.g. 2700, 6500). Hue v2
+-- expects 'mirek' = 1e6 / Kelvin, clamped to the bridge's accepted range
+-- (153 cool .. 500 warm). Accept either unit: values <= 1000 are treated as
+-- already-mirek (defensive — Fibaro UIs sometimes send mirek directly).
+local function kelvinToMirek(v)
+  v = tonumber(v)
+  if not v or v <= 0 then return 250 end
+  local m = v <= 1000 and v or (1000000 / v)
+  m = math.floor(m + 0.5)
+  if m < 153 then m = 153 end
+  if m > 500 then m = 500 end
+  return m
+end
 
 -- Reads a single plugin variable from any device by id and key.
 -- Returns the value string, or nil if the variable does not exist.
@@ -657,7 +671,9 @@ function defClasses()
   end
   function TempLight:setColorTemperature(value)
     if type(value)=='table' and value.values then value = value.values[1] end
-    self.light:setTemperature(tonumber(value))
+    local mirek = kelvinToMirek(value)
+    self:print("setColorTemperature %s K -> %s mirek", tostring(value), mirek)
+    self.light:setTemperature(mirek)
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
@@ -948,16 +964,20 @@ function defClasses()
   function RoomZoneQA:stopLevelChange()
     self.group:setDim(-1)
   end
-  -- Sets color temperature in mirek.
+  -- Sets color temperature. HC3 passes Kelvin; convert to Hue mirek.
   function RoomZoneQA:setColorTemperature(value)
     if type(value)=='table' and value.values then value = value.values[1] end
-    self.group:setTemperature(tonumber(value))
+    local mirek = kelvinToMirek(value)
+    self:print("setColorTemperature %s K -> %s mirek", tostring(value), mirek)
+    self.group:setTemperature(mirek)
   end
   -- Sets color from RRGGBB hex string.
   function RoomZoneQA:setColor(r,g,b,w)
     local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
     self:print("setColor %s,%s,%s",r,g,b)
-    if not (self.group.rsrc and self.group.rsrc.color) then
+    local hasColorSvc = self.group.rsrc and self.group.rsrc.color
+    self:print("setColor [diag v%s] group rsrc.color=%s", VERSION, hasColorSvc and "yes" or "no")
+    if not hasColorSvc then
       self:print("setColor ignored – group does not support color (CT-only lights)")
       return
     end
