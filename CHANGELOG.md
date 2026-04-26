@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.15] - 2026-04-26
+
+## Changes in v0.2.15
+
+- ✨ **Feature**: update scene recall functionality and add scene mode toggle in devices.lua fix: correct file reference in Yahue.lua chore: add release notes for v0.2.14
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.14] - 2026-04-26
 
 ## Changes in v0.2.14
