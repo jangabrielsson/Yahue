@@ -15,7 +15,7 @@ of this license document, but changing it is not allowed.
 -- luacheck: globals ignore behavior_instance geolocation geolocation_client
 -- luacheck: ignore 212/self
 
-local _version_e = 0.58
+local _version_e = 0.59
 
 local fmt = string.format
 fibaro.debugFlags = fibaro.debugFlags or {}
@@ -1002,28 +1002,67 @@ local function main()
     })
   end
   
-  function huePUT(path,data,op)
-    DEBUG('call',"%s %s",path,json.encode(data))
-    net.HTTPClient():request(url..path,{
+  ---------------------------------------------------------------------------
+  -- huePUT pacer
+  -- Hue v2 bridges rate-limit ~10 cmd/s for lights and ~1 cmd/s for groups.
+  -- A QA that fires many turnOn/setValue/setColor at startup will get 429
+  -- responses and the bridge will then drop further calls for some time.
+  -- We serialize PUTs through a FIFO queue with a min gap between sends.
+  -- Min gap is configurable via QA variable `hueMinGap` (ms), default 100.
+  -- On 429 we double the gap (cap 2s) and re-queue at the front; on any
+  -- successful PUT we decay the gap back toward the configured minimum.
+  ---------------------------------------------------------------------------
+  local putQueue = {}
+  local putBaseGap = math.max(0, tonumber(quickApp:getVariable("hueMinGap")) or 100)
+  local putGap = putBaseGap
+  local putBusy = false
+  local function sendOne(item, retried)
+    DEBUG('call',"%s %s",item.path,json.encode(item.data))
+    net.HTTPClient():request(url..item.path,{
       options = {
-        method=op or 'PUT', 
-        data=data and json.encode(data) or nil,
-        checkCertificate=false, 
+        method=item.op or 'PUT',
+        data=item.data and json.encode(item.data) or nil,
+        checkCertificate=false,
         ['content-type']="application/json",
         headers={ ['hue-application-key'] = app_key }
       },
       success = function(resp)
+        if resp.status == 429 and not retried then
+          -- back off and retry once
+          putGap = math.min(putGap == 0 and 200 or putGap * 2, 2000)
+          WARNING("hue PUT 429, throttling to %dms",putGap)
+          setTimeout(function() sendOne(item, true) end, putGap)
+          return
+        end
+        -- decay gap back toward base on success
+        if putGap > putBaseGap then
+          putGap = math.max(putBaseGap, math.floor(putGap / 2))
+        end
         local body = resp.data and json.decode(resp.data)
         if body and body.errors and #body.errors > 0 then
-          ERROR("hue PUT error, %s - %s",path,json.encode(body.errors))
+          WARNING("hue PUT error, %s - %s",item.path,json.encode(body.errors))
         end
       end,
-      error = function(err,f,g)
-        ERROR("hue call, %s %s - %s",path,json.encode(data),err)
+      error = function(err)
+        WARNING("hue call, %s %s - %s",item.path,json.encode(item.data),err)
       end,
     })
   end
-  
+  local function drainPutQueue()
+    if putBusy then return end
+    local item = table.remove(putQueue, 1)
+    if not item then return end
+    putBusy = true
+    sendOne(item)
+    setTimeout(function()
+      putBusy = false
+      if #putQueue > 0 then drainPutQueue() end
+    end, putGap)
+  end
+  function huePUT(path,data,op)
+    putQueue[#putQueue+1] = {path=path,data=data,op=op}
+    drainPutQueue()
+  end  
   --[[
   {
   "dimming":{"brightness":58.66}, // color,color_temperature,on
