@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.16] - 2026-04-26
+
+## Changes in v0.2.16
+
+- ✨ **Feature**: update version to 0.2.16 and improve uiVersion handling in devices.lua
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.15] - 2026-04-26
 
 ## Changes in v0.2.15
