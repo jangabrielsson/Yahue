@@ -1,5 +1,5 @@
 do
-  local VERSION = "2.6.2"
+  local VERSION = "2.6.3"
 
   print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
@@ -354,9 +354,18 @@ do
           store = ch.data.store,
           room = ch.data.room,
         }
-        local child = self:createChild(uid,props,className,UI)
-        if child and ch.data.uiVersion then
-          child:internalStorageSet(uiVersionID, tonumber(ch.data.uiVersion) or 0)
+        -- Per-child pcall: a single broken child must not abort the whole
+        -- batch. Otherwise a stale-uiVersion delete + failed create would
+        -- leave _uiPatched=true with remaining stale children, restart, and
+        -- loop forever. Log the offending UID and continue with the rest.
+        local ok, err = pcall(function()
+          local child = self:createChild(uid,props,className,UI)
+          if child and ch.data.uiVersion then
+            child:internalStorageSet(uiVersionID, tonumber(ch.data.uiVersion) or 0)
+          end
+        end)
+        if not ok then
+          ERRORF("createMissingChildren: UID:'%s' %s", uid, tostring(err))
         end
       end
     end
