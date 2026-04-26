@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.27] - 2026-04-26
+
+## Changes in v0.2.27
+
+- ✨ **Feature**: chore: commit release notes and updates for v0.2.26
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.26] - 2026-04-26
 
 ## Changes in v0.2.26
