@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.21] - 2026-04-26
+
+## Changes in v0.2.21
+
+- ✨ **Feature**: update version to 0.2.21 and enhance scene management in devices.lua
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.20] - 2026-04-26
 
 ## Changes in v0.2.20
