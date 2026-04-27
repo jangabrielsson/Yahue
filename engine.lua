@@ -200,7 +200,12 @@ local function main()
     self._inheritedFuns = {}
     self.path = "/clip/v2/resource/"..self.type.."/"..self.id
     self._inited = true
-    self.listeners = {}
+    -- Preserve listeners across :modified() — :setup() is called both on
+    -- initial construction AND every time the resource is re-sent by the
+    -- bridge (e.g. the 30-min health-check refresh). Resetting listeners
+    -- here would drop every child QA's subscription, so events keep being
+    -- received and processed but never propagate (children stop updating).
+    self.listeners = self.listeners or {}
     self._props = props[self.type]
     self._meths = meths[self.type]
     DEBUG("class","Setup %s '%s' %s",self.id,self.type,self.name or "rsrc")
