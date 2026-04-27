@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.30] - 2026-04-27
+
+## Changes in v0.2.30
+
+- ✨ **Feature**: Clean up diagnostic instrumentation in RoomZoneQA:__init and qwikchild constructors (v0.2.30)
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.29] - 2026-04-26
 
 ## Changes in v0.2.29
