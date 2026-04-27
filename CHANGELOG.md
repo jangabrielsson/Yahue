@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.31] - 2026-04-27
+
+## Changes in v0.2.31
+
+- ✨ **Feature**: chore: update version to v0.2.31 and add release notes for v0.2.30
+  - Co-authored-by: Copilot <copilot@github.com>
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.30] - 2026-04-27
 
 ## Changes in v0.2.30
