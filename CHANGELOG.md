@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.32] - 2026-04-27
+
+## Changes in v0.2.32
+
+- ✨ **Feature**: Fix health-check deleting all resources due to _dirty flag set on raw record instead of resource object; add SSE epoch-guard to prevent duplicate event processing after watchdog/error reconnect
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.31] - 2026-04-27
 
 ## Changes in v0.2.31
