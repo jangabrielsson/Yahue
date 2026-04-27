@@ -1168,13 +1168,22 @@ local function main()
       return
     end
     refreshBackoff = err_retry
+    -- Mark every existing resource dirty; entries still dirty after we walk
+    -- the fresh bridge response are gone from the bridge and should be
+    -- removed locally. NOTE: _dirty must be cleared on the resource OBJECT
+    -- in id2resource[id], NOT on the raw JSON record `r`. resources.add()
+    -- for an existing id calls :modified() which replaces self.rsrc but
+    -- does not touch self._dirty — so we have to clear it explicitly here,
+    -- otherwise every health-check deletes ALL resources from the
+    -- registry, SSE events stop being routed (resources.get returns nil),
+    -- and the QA looks like the event listener died.
     for _,r in pairs(resources.id2resource) do
       r._dirty = true
     end
     for _,r in ipairs(ev.result.data or {}) do
-      --print(r.type)
-      r._dirty=nil
       resources.add(r.id,r)
+      local existing = resources.id2resource[r.id]
+      if existing then existing._dirty = nil end
     end
     for _,r in pairs(resources.id2resource) do
       if r._dirty then
