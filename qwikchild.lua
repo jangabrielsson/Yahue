@@ -1,5 +1,5 @@
 do
-  local VERSION = "2.6.5"
+  local VERSION = "2.6.6"
 
   print("QwikAppChild library v"..VERSION)
   local childID = 'ChildID'
@@ -205,14 +205,8 @@ do
     end
     if room then api.put("/devices/"..device.id,{roomID=room}) end
     local deviceClass = _G[className] or QuickAppChild
-    DEBUGF("_createChildDevice: about to construct className='%s' (resolved=%s) for child id=%s uid=%s",
-      tostring(className), tostring(_G[className] ~= nil), tostring(device.id), tostring(uid))
     local ok, child = pcall(deviceClass, device)
-    if not ok then
-      DEBUGF("_createChildDevice: CONSTRUCTOR FAILED className='%s' err=%s", tostring(className), tostring(child))
-      error(child)
-    end
-    DEBUGF("_createChildDevice: constructor OK className='%s' child id=%s", tostring(className), tostring(device.id))
+    if not ok then error(child) end
     child.parent = self
     self.childDevices[device.id] = child
     return child
@@ -306,10 +300,7 @@ do
           DEBUGF("Loading existing child UID:'%s'",uid)
           local stat,err = pcall(function()
             local deviceClass = _G[className] or QuickAppChild
-            DEBUGF("loadExisting: about to construct className='%s' (resolved=%s) for child id=%s uid=%s",
-              tostring(className), tostring(_G[className] ~= nil), tostring(child.id), tostring(uid))
             local childObject = deviceClass(child) -- Init
-            DEBUGF("loadExisting: constructor OK className='%s' child id=%s", tostring(className), tostring(child.id))
             self.childDevices[child.id] = childObject
             childObject.parent = self
           end)

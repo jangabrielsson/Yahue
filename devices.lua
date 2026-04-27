@@ -3,7 +3,7 @@
 fibaro.debugFlags = fibaro.debugFlags or {}
 local HUE
 
-local VERSION = "0.2.29"
+local VERSION = "0.2.30"
 local serial = "UPD896661234567893"
 fibaro.engine = fibaro.engine or {}
 local HUE = fibaro.engine
@@ -785,39 +785,11 @@ function defClasses()
   -- startup and the QA will restart once.
   RoomZoneQA.uiVersion = 4
   function RoomZoneQA:__init(device)
-    -- Stage helper: each phase is wrapped in pcall and tagged so a nil-call
-    -- failure on HC3 (where debug.traceback is unavailable) is localised.
-    -- Logging is via fibaro.debug (not self:*), because if HueClass.__init
-    -- partially failed self.pname / properties may be nil and self:warning
-    -- itself could raise — hiding the original error.
-    local devId = device and device.id or "?"
-    local tag = "RoomZoneQA:"..tostring(devId)
-    -- Use both quickApp:debug (visible in HC3 console) and print (raw stdout)
-    -- so the breadcrumb is impossible to lose. fibaro.debug was tried in
-    -- v0.2.27 but produced no output for the reporter — switch belt-and-braces.
-    local function dbg(msg)
-      pcall(function() quickApp:debug(tag, msg) end)
-      pcall(print, tag, msg)
-    end
-    local function stage(name, fn)
-      dbg("[__init] enter stage='"..name.."'")
-      local ok, err = pcall(fn)
-      if not ok then
-        dbg("[__init] stage='"..name.."' FAILED: "..tostring(err))
-      else
-        dbg("[__init] stage='"..name.."' ok")
-      end
-      return ok
-    end
-    dbg("[__init] BEGIN devId="..tostring(devId))
-    stage("HueClass.__init", function() HueClass.__init(self,device) end)
-    dbg("[__init] uid="..tostring(self.uid).." pname="..tostring(self.pname))
-    stage("setup", function()
-      self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
-      self.transition = tonumber(self:getVariable("transition")) or 0
-      local svcs = self.dev:findServiceByType('grouped_light')
-      self.group = (svcs and svcs[1]) or self.dev
-    end)
+    HueClass.__init(self,device)
+    self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
+    self.transition = tonumber(self:getVariable("transition")) or 0
+    local svcs = self.dev:findServiceByType('grouped_light')
+    self.group = (svcs and svcs[1]) or self.dev
 
     -- Per-member aggregation state. The Hue `grouped_light` resource does not
     -- reliably emit `on` events when only individual member lights change,
@@ -888,7 +860,6 @@ function defClasses()
       if self.hasColor then aggregateColor() end
     end
 
-    dbg("[__init] enter member loop, children="..tostring(self.dev and self.dev.children and #(self.dev.children) or "?"))
     for _,c in pairs(self.dev and self.dev.children or {}) do
       -- Wrap the entire per-member setup in pcall: a single broken member
       -- (stale rid, non-light device like a wall switch / dimmer button,
@@ -985,10 +956,9 @@ function defClasses()
       setTimeout(function() c0:publishAll() end, 0)
       end)  -- end pcall per-member
       if not ok_m then
-        dbg("[__init] member init failed: "..tostring(err_m))
+        self:warning("member init failed: "..tostring(err_m))
       end
     end
-    dbg("[__init] member loop done")
 
     -- NOTE: we deliberately do NOT subscribe to the grouped_light `dimming`,
     -- `color` or `color_temperature` events. Hue computes a group-level
@@ -996,15 +966,10 @@ function defClasses()
     -- one red + one off light), and dimming emits transient mid-fade values.
     -- The room's value/color are derived from per-member subscriptions above.
 
-    -- Each post-loop phase wrapped in pcall with the stage helper defined
-    -- above. The child still completes init even if one phase fails; the
-    -- error is surfaced as a warning naming the failing phase.
-    stage("publishAll", function() self.dev:publishAll() end)
-    stage("loadScenes", function() loadScenesForRoom(self) end)
-    stage("sceneMode",  function()
-      local mode = self:getVariable("sceneMode") == "dynamic" and "Dynamic" or "Static"
-      self:updateView("sceneMode", "text", mode)
-    end)
+    self.dev:publishAll()
+    loadScenesForRoom(self)
+    local mode = self:getVariable("sceneMode") == "dynamic" and "Dynamic" or "Static"
+    self:updateView("sceneMode", "text", mode)
   end
   
   -- Stores a Hue scene name in the QA variable 'scene' for use by turnOn().
