@@ -904,6 +904,15 @@ local function main()
     local WATCHDOG_MS = watchdogSec * 1000
     local lastSeen = 0
     local watchdogRef
+    -- Epoch guard: HC3's net.HTTPClient has no abort. When we issue a new
+    -- request (watchdog reconnect, parse-failure reconnect, error reconnect)
+    -- the OLD client may still be alive and will keep firing success/error
+    -- callbacks. Without a guard, those stale callbacks would (a) re-publish
+    -- duplicate Hue events through handle_events and (b) schedule their own
+    -- getw() retries, causing an unbounded fan-out of parallel SSE consumers.
+    -- Each call to getw() bumps `epoch`; each request's callbacks capture
+    -- their own `myEpoch` and silently no-op when superseded.
+    local epoch = 0
     local function armWatchdog()
       if WATCHDOG_MS <= 0 then return end
       if watchdogRef then clearTimeout(watchdogRef) end
@@ -918,17 +927,6 @@ local function main()
         end
       end, WATCHDOG_MS)
     end
-    local args = {
-      options = { 
-        method='GET', 
-        checkCertificate=false,
-        headers={
-          ["hue-application-key"] = app_key, 
-          ['Accept'] = "text/event-stream" 
-        },
-        timeout = 2000 
-      }
-    }
     local function bumpBackoff()
       if backoff == 0 then backoff = 1000
       else backoff = math.min(backoff * 2, 30000) end
@@ -941,38 +939,54 @@ local function main()
     -- parse failure (which means the underlying stream is broken).
     -- A good `success` resets the backoff; failures grow it (1s → 2s → ...
     -- → 30s cap) so an unreachable bridge does not spam reconnects.
-    function args.success(res)
-      backoff = 0
-      lastSeen = os.time()
-      local stat,err = pcall(function()
-        local body = res and res.data
-        if type(body) ~= 'string' or body == '' then return end
-        if body:match("^: hi") then return end          -- SSE keep-alive comment
-        local arr = body:match("(%b[])")
-        if not arr then return end                      -- partial / non-data frame
-        local data = json.decode(arr)
-        if data then handle_events(data) end
-      end)
-      if not stat then
-        local d = bumpBackoff()
-        WARNING("/eventstream parse: %s (retry in %dms)", tostring(err), d)
-        setTimeout(getw, d)
-      end
-    end
-    function args.error(err)
-      local transient = err == "timeout" or err == "wantread"
-      if not transient then
-        local d = bumpBackoff()
-        WARNING("/eventstream: %s (retry in %dms)", err, d)
-        setTimeout(getw, d)
-      else
-        getw()
-      end
-    end
-    function getw() 
+    function getw()
+      epoch = epoch + 1
+      local myEpoch = epoch
       lastSeen = os.time()
       armWatchdog()
-      net.HTTPClient():request(eurl,args) 
+      local args = {
+        options = {
+          method='GET',
+          checkCertificate=false,
+          headers={
+            ["hue-application-key"] = app_key,
+            ['Accept'] = "text/event-stream"
+          },
+          timeout = 2000
+        }
+      }
+      function args.success(res)
+        if myEpoch ~= epoch then return end  -- superseded by newer getw()
+        backoff = 0
+        lastSeen = os.time()
+        local stat,err = pcall(function()
+          local body = res and res.data
+          if type(body) ~= 'string' or body == '' then return end
+          if body:match("^: hi") then return end          -- SSE keep-alive comment
+          local arr = body:match("(%b[])")
+          if not arr then return end                      -- partial / non-data frame
+          local data = json.decode(arr)
+          if data then handle_events(data) end
+        end)
+        if not stat then
+          if myEpoch ~= epoch then return end
+          local d = bumpBackoff()
+          WARNING("/eventstream parse: %s (retry in %dms)", tostring(err), d)
+          setTimeout(getw, d)
+        end
+      end
+      function args.error(err)
+        if myEpoch ~= epoch then return end  -- superseded
+        local transient = err == "timeout" or err == "wantread"
+        if not transient then
+          local d = bumpBackoff()
+          WARNING("/eventstream: %s (retry in %dms)", err, d)
+          setTimeout(getw, d)
+        else
+          getw()
+        end
+      end
+      net.HTTPClient():request(eurl,args)
     end
     setTimeout(getw,0)
   end
