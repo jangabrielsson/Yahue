@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.33] - 2026-04-27
+
+## Changes in v0.2.33
+
+- ✨ **Feature**: Preserve resource listeners across :modified() refresh — health-check no longer wipes child QA subscriptions
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.32] - 2026-04-27
 
 ## Changes in v0.2.32
