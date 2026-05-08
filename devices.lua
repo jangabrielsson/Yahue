@@ -837,9 +837,13 @@ function defClasses()
       for _,s in pairs(statuses) do if s then anyAlive = true; break end end
       self:updateProperty("dead", not anyAlive)
 
-      -- state: on if ANY member light is on
+      -- state: on if ANY member light is on. When all members are dead the
+      -- bridge may still report stale on=true; suppress that so state/value
+      -- are cleared together with dead.
       local anyOn = false
-      for _,v in pairs(devsons) do if v then anyOn = true; break end end
+      if anyAlive then
+        for _,v in pairs(devsons) do if v then anyOn = true; break end end
+      end
 
       self:updateProperty("state", anyOn)
       -- HC3 quirk: value=0 on colorController forces state=false, so we must
@@ -883,7 +887,12 @@ function defClasses()
         self:warning("skipping unresolvable zone/room member")
         return
       end
-      statuses[c.id] = true
+      -- The status callback fires with b = the zigbee_connectivity service,
+      -- so b.id is the zig service ID, not the device ID. Pre-seed statuses
+      -- with that same ID so the callback overwrites the correct entry.
+      local zigSvc = c.findServiceByType and c:findServiceByType('zigbee_connectivity')[1]
+      local statusId = zigSvc and zigSvc.id or c.id
+      statuses[statusId] = true
       local memberId = c.id
       c:subscribe("status",function(key,value,b)
         statuses[b.id] = value == 'connected'
