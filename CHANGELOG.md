@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.34] - 2026-05-08
+
+## Changes in v0.2.34
+
+- 🐛 **Fix**: update proxy configuration and enhance state management logic in devices
+- ✨ **Feature**: add forum post helper for release v0.2.33 with resource listener preservation details
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.33] - 2026-04-27
 
 ## Changes in v0.2.33
