@@ -1030,11 +1030,19 @@ function defClasses()
     self.group:turnOff(self.transition)
   end
   -- Sets group brightness (0-100).
+  -- HC3 colorController devices may receive setValue(false) or setValue(0)
+  -- from rules/block-scenes when the user turns off the device. tonumber(false)
+  -- returns nil, which would send dimming:{} (empty) to Hue — the bridge
+  -- ignores it and the lights stay on. Treat nil/0/false as turnOff.
   function RoomZoneQA:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
-    self:print("setValue")
-    if value and value > 0 then self.lastVal = value end
+    self:print("setValue %s", tostring(value))
+    if not value or value <= 0 then
+      self:turnOff()
+      return
+    end
+    self.lastVal = value
     self:updateProperty("value", value)
     self.group:setDim(value, self.transition)
   end
