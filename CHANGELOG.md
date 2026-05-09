@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.39] - 2026-05-09
+
+## Changes in v0.2.39
+
+- 🐛 **Fix**: enable resource resynchronization on refresh for improved reliability
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.38] - 2026-05-09
 
 ## Changes in v0.2.38
