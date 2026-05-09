@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.38] - 2026-05-09
+
+## Changes in v0.2.38
+
+- 🐛 **Fix**: ensure resource state consistency after reconnects by refreshing and re-publishing
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.37] - 2026-05-09
 
 ## Changes in v0.2.37
