@@ -926,6 +926,12 @@ local function main()
         local quiet = (os.time() - lastSeen) * 1000
         if quiet >= WATCHDOG_MS then
           WARNING("/eventstream: no data for %ds, reconnecting", math.floor(quiet/1000))
+          -- Re-fetch the full resource tree after reconnect: the SSE gap
+          -- means we missed any events that happened while the socket was
+          -- silently dead. REFRESH_RESOURCES + the resync flag re-publishes
+          -- current state so child QAs catch up.
+          HUE._resyncOnRefresh = true
+          post({type='REFRESH_RESOURCES'})
           getw()
         else
           armWatchdog()
@@ -986,6 +992,14 @@ local function main()
         if not transient then
           local d = bumpBackoff()
           WARNING("/eventstream: %s (retry in %dms)", err, d)
+          -- After the first non-transient failure (backoff > min) we have
+          -- almost certainly missed bridge events while the socket was
+          -- broken. Force a resource refresh + re-publish on the next
+          -- successful connect so child QAs catch up.
+          if backoff > 1000 then
+            HUE._resyncOnRefresh = true
+            post({type='REFRESH_RESOURCES'})
+          end
           setTimeout(getw, d)
         else
           getw()
@@ -1193,6 +1207,21 @@ local function main()
     for _,r in pairs(resources.id2resource) do
       if r._dirty then
         resources.delete(r.id)
+      end
+    end
+    -- Re-publish current resource state to all listeners after a *reconnect*
+    -- refresh so child QAs catch up on anything that changed during the SSE
+    -- gap. :modified() above only swaps self.rsrc; it does not fire any
+    -- listeners, so without this loop child QAs would still be showing
+    -- pre-gap state (e.g. light reported off in HC3 while physically on
+    -- because the bridge's on=true event arrived during a dead socket).
+    -- Skipped on the initial startup refresh — there are no subscribers yet
+    -- and `callBack` will run device construction which publishes anyway.
+    if HUE._resyncOnRefresh then
+      HUE._resyncOnRefresh = nil
+      DEBUG('v2api',"Re-publishing resource state after reconnect")
+      for _,r in pairs(resources.id2resource) do
+        pcall(function() r:publishAll() end)
       end
     end
     local cb
