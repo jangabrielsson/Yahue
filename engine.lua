@@ -1396,6 +1396,7 @@ local function main()
       fetchEvents()
       setInterval(function()
         DEBUG('info',"Health-check: refreshing Hue resources")
+        HUE._resyncOnRefresh = true
         post({type='REFRESH_RESOURCES'})
       end, 30*60*1000)
       if cb then cb() end
