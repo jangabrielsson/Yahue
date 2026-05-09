@@ -812,12 +812,13 @@ function defClasses()
     -- Primary brightness source: the grouped_light resource's own reported
     -- dimming.brightness. The bridge emits this after PUT commands and often
     -- after scene recalls, and it reflects the bridge's own aggregate (usually
-    -- max of on-members). We use it to keep lastVal current so that an
-    -- off→on cycle restores a reasonable brightness rather than a stale value.
+    -- max of on-members). We use it to update the displayed value but NOT
+    -- lastVal — lastVal is the restore-brightness used when turnOn() is called
+    -- with no argument, and should only be set from explicit user commands
+    -- so that turnOn after a dim scene restores a sensible level.
     if self.hasDim then
       self.group:subscribe("dimming", function(key, value, _)
         if type(value) == 'number' and value > 0 then
-          self.lastVal = value
           if self.properties.state then
             self:updateProperty("value", value)
           end
