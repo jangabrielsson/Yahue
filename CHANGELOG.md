@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.37] - 2026-05-09
+
+## Changes in v0.2.37
+
+- 🐛 **Fix**: recompute average brightness in defClasses to handle dimming events correctly
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.36] - 2026-05-08
 
 ## Changes in v0.2.36
