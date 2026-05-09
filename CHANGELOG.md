@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.41] - 2026-05-09
+
+## Changes in v0.2.41
+
+- ✨ **Feature**: update brightness handling for grouped lights to improve user experience
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.40] - 2026-05-09
 
 ## Changes in v0.2.40
