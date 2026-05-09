@@ -809,6 +809,22 @@ function defClasses()
     local memberBri = {}
     self.lastVal = nil  -- last known positive group brightness
 
+    -- Primary brightness source: the grouped_light resource's own reported
+    -- dimming.brightness. The bridge emits this after PUT commands and often
+    -- after scene recalls, and it reflects the bridge's own aggregate (usually
+    -- max of on-members). We use it to keep lastVal current so that an
+    -- off→on cycle restores a reasonable brightness rather than a stale value.
+    if self.hasDim then
+      self.group:subscribe("dimming", function(key, value, _)
+        if type(value) == 'number' and value > 0 then
+          self.lastVal = value
+          if self.properties.state then
+            self:updateProperty("value", value)
+          end
+        end
+      end)
+    end
+
     -- Recomputes the room's `color` property as a brightness-weighted RGB
     -- average across all currently-on members. Prefers xy colour over CT
     -- per member. With no on members, leaves the previous colour in place
@@ -851,25 +867,9 @@ function defClasses()
       -- coming back on with no current brightness.
       if anyOn then
         if self.hasDim then
-          -- Recompute average brightness from per-member data if available.
-          -- This covers the case where dimming SSE events arrived before the
-          -- on events (so devsons was empty when they fired and n stayed 0).
-          -- Now that devsons is populated we can do the average properly.
-          local sum, n = 0, 0
-          for sid, bri in pairs(memberBri) do
-            if devsons[sid] and bri and bri > 0 then
-              sum = sum + bri; n = n + 1
-            end
-          end
-          if n > 0 then
-            local avg = math.max(1, ROUND(sum / n))
-            self.lastVal = avg
-            self:updateProperty("value", avg)
-          else
-            local cur = tonumber(self.properties.value) or 0
-            if cur <= 0 then
-              self:updateProperty("value", self.lastVal or 100)
-            end
+          local cur = tonumber(self.properties.value) or 0
+          if cur <= 0 then
+            self:updateProperty("value", self.lastVal or 100)
           end
         else
           self:updateProperty("value", true)
