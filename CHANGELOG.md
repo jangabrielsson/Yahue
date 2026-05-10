@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.43] - 2026-05-10
+
+## Changes in v0.2.43
+
+- ✨ **Feature**: implement request coalescing for resource refresh to optimize bridge communication
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.42] - 2026-05-10
 
 ## Changes in v0.2.42
