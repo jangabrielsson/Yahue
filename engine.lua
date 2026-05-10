@@ -1175,10 +1175,20 @@ local function main()
     end
   end)
   
-  fibaro.event({type='REFRESH_RESOURCES'},function(_) hueGET("/clip/v2/resource",'REFRESHED_RESOURCES') end)
-  
+  local refreshInFlight = false
+  fibaro.event({type='REFRESH_RESOURCES'},function(_)
+    -- Coalesce concurrent refresh requests: if a fetch is already in flight
+    -- (e.g. health-check and error-reconnect both posted REFRESH_RESOURCES at
+    -- the same time) drop the duplicate rather than hammering the bridge with
+    -- a second GET that would also race to retry on 429.
+    if refreshInFlight then return end
+    refreshInFlight = true
+    hueGET("/clip/v2/resource",'REFRESHED_RESOURCES')
+  end)
+
   local refreshBackoff = err_retry
   fibaro.event({type='REFRESHED_RESOURCES'},function(ev)
+    refreshInFlight = false
     if ev.error then
       WARNING("/clip/v2/resource %s",ev.error)
       WARNING("Retry in %ss",refreshBackoff)
