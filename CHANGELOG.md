@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.46] - 2026-05-10
+
+## Changes in v0.2.46
+
+- ✨ **Feature**: implement fadeTo functionality for lights and groups with enhanced command handling
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.45] - 2026-05-10
 
 ## Changes in v0.2.45
