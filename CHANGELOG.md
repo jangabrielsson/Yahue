@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.44] - 2026-05-10
+
+## Changes in v0.2.44
+
+- ✨ **Feature**: improve error logging and implement request coalescing for hue PUT operations
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.43] - 2026-05-10
 
 ## Changes in v0.2.43
