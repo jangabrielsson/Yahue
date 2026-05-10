@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.45] - 2026-05-10
+
+## Changes in v0.2.45
+
+- ✨ **Feature**: add raw command support for Hue API and enhance brightness control for lights and groups
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.44] - 2026-05-10
 
 ## Changes in v0.2.44
