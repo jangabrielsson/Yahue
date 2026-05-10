@@ -301,8 +301,24 @@ function defClasses()
     local svc = rawget(self,'light')
     if svc and svc.setTimedEffect then svc:setTimedEffect(effect, duration_ms) end
   end
+  -- Sends a raw Hue v2 API command table directly to the underlying light or
+  -- group service. Useful for effects not exposed by the standard QA methods,
+  -- such as a fade-up from a specific start brightness:
+  --
+  --   -- Turn on at 1%, then fade to 50% over 3 seconds:
+  --   fibaro.call(id, "rawCmd", {on={on=true}, dimming={brightness=1}})
+  --   setTimeout(function()
+  --     fibaro.call(id, "rawCmd", {on={on=true}, dimming={brightness=50},
+  --                                dynamics={duration=3000}})
+  --   end, 200)
+  --
+  -- cmd: a table matching the Hue v2 grouped_light / light PUT body.
+  function HueClass:rawCmd(cmd)
+    if type(cmd) == 'table' and cmd.values then cmd = cmd.values[1] end
+    local svc = rawget(self,'group') or rawget(self,'light')
+    if svc and svc.rawCmd then svc:rawCmd(cmd) end
+  end
 
-  -- Populates the 'sceneSelect' dropdown for a RoomZoneQA child.
   -- Finds all scenes whose group is this room/zone resource directly.
   local function loadScenesForRoom(child)
     local groupId = child.uid
@@ -646,6 +662,16 @@ function defClasses()
   function DimmableLight:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
+    self:updateProperty("value",value)
+    -- Include on:true so setValue turns the light on in a single PUT.
+    self.light:sendCmd({on={on=true},dimming={brightness=value},dynamics=self.transition and self.transition>0 and {duration=self.transition} or nil})
+  end
+  -- Sets brightness without turning the light on. Useful for pre-positioning
+  -- before a fade-up: fibaro.call(id,"setDim",1) then later setValue(50).
+  function DimmableLight:setDim(value)
+    if type(value)=='table' and value.values then value = value.values[1] end
+    value = tonumber(value)
+    if not value then return end
     self:updateProperty("value",value)
     self.light:setDim(value, self.transition)
   end
@@ -1072,6 +1098,18 @@ function defClasses()
       return
     end
     self.lastVal = value
+    self:updateProperty("value", value)
+    self:_stampCmd()
+    -- Include on:true so setValue turns the group on in a single PUT.
+    self.group:sendCmd({on={on=true},dimming={brightness=value},dynamics=self.transition and self.transition>0 and {duration=self.transition} or nil})
+  end
+  -- Sets group brightness without turning it on. Useful for pre-positioning
+  -- before a fade-up: fibaro.call(id,"setDim",1) then later setValue(50).
+  function RoomZoneQA:setDim(value)
+    if type(value)=='table' and value.values then value = value.values[1] end
+    value = tonumber(value)
+    self:print("setDim %s", tostring(value))
+    if not value or value < 0 then return end
     self:updateProperty("value", value)
     self:_stampCmd()
     self.group:setDim(value, self.transition)
