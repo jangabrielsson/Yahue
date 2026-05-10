@@ -310,7 +310,7 @@ local function main()
       else self.listeners[key][fun]=nil end
     end
   end
-  function hueResource:sendCmd(cmd) return huePUT(self.path,cmd) end
+  function hueResource:sendCmd(cmd,slot) return huePUT(self.path,cmd,nil,slot) end
   function hueResource:__tostring() return self._str or fmt("[rsrc:%s]",self.id) end
   function hueResource:annotateEvent(r)
     return setmetatable(r,{
@@ -358,10 +358,17 @@ local function main()
   function light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) end
   function light:setDim(val,transition)
     if val == -1 then
-      self:sendCmd({dimming_delta={action='stop'}})
+      self:sendCmd({dimming_delta={action='stop'}},'setDim')
     else
-      self:sendCmd({dimming={brightness=val},dynamics=transition and {duration=transition} or nil})
+      self:sendCmd({dimming={brightness=val},dynamics=transition and {duration=transition} or nil},'setDim')
     end
+  end
+  -- Fades from `from`% to `to`% (with turn-on) over `duration` ms.
+  -- Pre-positions at `from` (no turn-on) then sends the fade in a single queue
+  -- cycle — no user-side timer needed.
+  function light:fadeTo(from,to,duration)
+    self:sendCmd({dimming={brightness=from}},'setDim')
+    self:sendCmd({on={on=true},dimming={brightness=to},dynamics=duration and {duration=duration} or nil})
   end
   function light:setColor(arg,transition) -- {x=x,y=y} <string>, {r=r,g=g,b=b}
     local xy
@@ -578,10 +585,14 @@ local function main()
   function grouped_light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) end
   function grouped_light:setDim(val,transition)
     if val == -1 then
-      self:sendCmd({dimming_delta={action='stop'}})
+      self:sendCmd({dimming_delta={action='stop'}},'setDim')
     else
-      self:sendCmd({dimming={brightness=val},dynamics=transition and {duration=transition} or nil})
+      self:sendCmd({dimming={brightness=val},dynamics=transition and {duration=transition} or nil},'setDim')
     end
+  end
+  function grouped_light:fadeTo(from,to,duration)
+    self:sendCmd({dimming={brightness=from}},'setDim')
+    self:sendCmd({on={on=true},dimming={brightness=to},dynamics=duration and {duration=duration} or nil})
   end
   function grouped_light:setColor(arg,transition) -- {x=x,y=y} <string>, {r=r,g=g,b=b}
     local xy
@@ -1095,21 +1106,19 @@ local function main()
       if #putQueue > 0 then drainPutQueue() end
     end, putGap)
   end
-  function huePUT(path,data,op)
-    -- Last-write-wins: if a pending entry for the same path+op already exists
-    -- in the queue, replace its data rather than appending. This collapses
-    -- rapid-fire commands (e.g. automations that set many lights at once) so
-    -- we never accumulate more than one pending PUT per resource — drastically
-    -- reducing 429 pressure and draining time under load.
-    local targetOp = op or 'PUT'
+  -- slot: optional string that scopes last-write-wins dedup independently of
+  -- the HTTP op. Callers that must not overwrite each other pass distinct slots
+  -- (e.g. 'setDim' vs default 'PUT'). Same slot on the same path collapses.
+  function huePUT(path,data,op,slot)
+    local dedupKey = slot or op or 'PUT'
     for i, entry in ipairs(putQueue) do
-      if entry.path == path and (entry.op or 'PUT') == targetOp then
+      if entry.path == path and entry.slot == dedupKey then
         entry.data = data
         drainPutQueue()
         return
       end
     end
-    putQueue[#putQueue+1] = {path=path,data=data,op=op}
+    putQueue[#putQueue+1] = {path=path,data=data,op=op,slot=dedupKey}
     drainPutQueue()
   end  
   --[[

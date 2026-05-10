@@ -318,6 +318,16 @@ function defClasses()
     local svc = rawget(self,'group') or rawget(self,'light')
     if svc and svc.rawCmd then svc:rawCmd(cmd) end
   end
+  -- Fades from `from`% to `to`% over `duration` ms, turning the light on.
+  -- No user-side timer needed: setDim and setValue use distinct dedup slots
+  -- so both PUTs are queued and sent in order automatically.
+  function HueClass:fadeTo(from,to,duration)
+    if type(from)=='table' and from.values then
+      local v = from.values; from=tonumber(v[1]); to=tonumber(v[2]); duration=tonumber(v[3])
+    end
+    local svc = rawget(self,'group') or rawget(self,'light')
+    if svc and svc.fadeTo then svc:fadeTo(from,to,duration) end
+  end
 
   -- Finds all scenes whose group is this room/zone resource directly.
   local function loadScenesForRoom(child)
@@ -674,6 +684,16 @@ function defClasses()
     if not value then return end
     self:updateProperty("value",value)
     self.light:setDim(value, self.transition)
+  end
+  -- Fades from `from`% (no turn-on) to `to`% (turn-on) over `duration` ms.
+  -- fibaro.call(id, "fadeTo", 1, 50, 3000)
+  function DimmableLight:fadeTo(from,to,duration)
+    if type(from)=='table' and from.values then
+      local v = from.values; from=tonumber(v[1]); to=tonumber(v[2]); duration=tonumber(v[3])
+    end
+    if not from or not to then return end
+    self:updateProperty("value",to)
+    self.light:fadeTo(from,to,duration)
   end
   function DimmableLight:startLevelIncrease()
     self:print("startLevelIncrease")
@@ -1113,6 +1133,18 @@ function defClasses()
     self:updateProperty("value", value)
     self:_stampCmd()
     self.group:setDim(value, self.transition)
+  end
+  -- Fades from `from`% (no turn-on) to `to`% (turn-on) over `duration` ms.
+  -- fibaro.call(id, "fadeTo", 1, 50, 3000)
+  function RoomZoneQA:fadeTo(from,to,duration)
+    if type(from)=='table' and from.values then
+      local v = from.values; from=tonumber(v[1]); to=tonumber(v[2]); duration=tonumber(v[3])
+    end
+    if not from or not to then return end
+    self:print("fadeTo %s->%s over %sms", tostring(from), tostring(to), tostring(duration))
+    self:updateProperty("value", to)
+    self:_stampCmd()
+    self.group:fadeTo(from,to,duration)
   end
   -- Starts a smooth ramp up to 100% over self.dimdelay ms (default 8 s).
   function RoomZoneQA:startLevelIncrease()
