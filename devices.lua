@@ -672,8 +672,16 @@ function defClasses()
   function DimmableLight:setValue(value)
     if type(value)=='table' and value.values then value = value.values[1] end
     value = tonumber(value)
-    self:updateProperty("value",value)
-    -- Include on:true so setValue turns the light on in a single PUT.
+    if not value or value <= 0 then
+      -- setValue(0): instant off + snap to 1% (slot 'off'). A subsequent
+      -- setValue(x) is queued in slot 'PUT' and sent after — no wait needed.
+      self:updateProperty("state", false)
+      self:updateProperty("value", 0)
+      self.light:snapOff()
+      return
+    end
+    self:updateProperty("value", value)
+    self:updateProperty("state", true)
     self.light:sendCmd({on={on=true},dimming={brightness=value},dynamics=self.transition and self.transition>0 and {duration=self.transition} or nil})
   end
   -- Sets brightness without turning the light on. Useful for pre-positioning
@@ -1114,13 +1122,18 @@ function defClasses()
     value = tonumber(value)
     self:print("setValue %s", tostring(value))
     if not value or value <= 0 then
-      self:turnOff()
+      -- setValue(0): instant off + snap to 1% (slot 'off'). A subsequent
+      -- setValue(x) is queued in slot 'PUT' and sent after — no wait needed.
+      self:updateProperty("value", self.hasDim and 0 or false)
+      self:updateProperty("state", false)
+      self:_stampCmd()
+      self.group:snapOff()
       return
     end
     self.lastVal = value
     self:updateProperty("value", value)
+    self:updateProperty("state", true)
     self:_stampCmd()
-    -- Include on:true so setValue turns the group on in a single PUT.
     self.group:sendCmd({on={on=true},dimming={brightness=value},dynamics=self.transition and self.transition>0 and {duration=self.transition} or nil})
   end
   -- Sets group brightness without turning it on. Useful for pre-positioning

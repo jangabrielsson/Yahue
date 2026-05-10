@@ -356,6 +356,9 @@ local function main()
   end
   function light:turnOn(transition) self:sendCmd({on={on=true},dynamics=transition and {duration=transition} or nil}) end
   function light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) end
+  -- Instant off + snap brightness to 1% (no transition). Uses slot 'off' so a
+  -- subsequent setValue() in the same sync burst is queued separately.
+  function light:snapOff() self:sendCmd({on={on=false},dimming={brightness=1}},'off') end
   function light:setDim(val,transition)
     if val == -1 then
       self:sendCmd({dimming_delta={action='stop'}},'setDim')
@@ -583,6 +586,7 @@ local function main()
   function grouped_light:__tostring() return fmt("[grouped_light:%s,%s]",self.id,self:getName("GROUP")) end
   function grouped_light:turnOn(transition) self:sendCmd({on={on=true},dynamics=transition and {duration=transition} or nil}) end
   function grouped_light:turnOff(transition) self:sendCmd({on={on=false},dynamics=transition and {duration=transition} or nil}) end
+  function grouped_light:snapOff() self:sendCmd({on={on=false},dimming={brightness=1}},'off') end
   function grouped_light:setDim(val,transition)
     if val == -1 then
       self:sendCmd({dimming_delta={action='stop'}},'setDim')
