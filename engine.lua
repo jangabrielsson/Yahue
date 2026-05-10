@@ -1066,7 +1066,7 @@ local function main()
         if resp.status == 429 and not retried then
           -- back off and retry once
           putGap = math.min(putGap == 0 and 200 or putGap * 2, 2000)
-          WARNING("hue PUT 429, throttling to %dms",putGap)
+          WARNING("hue PUT HTTP 429 Too Many Requests, throttling to %dms",putGap)
           setTimeout(function() sendOne(item, true) end, putGap)
           return
         end
@@ -1096,6 +1096,19 @@ local function main()
     end, putGap)
   end
   function huePUT(path,data,op)
+    -- Last-write-wins: if a pending entry for the same path+op already exists
+    -- in the queue, replace its data rather than appending. This collapses
+    -- rapid-fire commands (e.g. automations that set many lights at once) so
+    -- we never accumulate more than one pending PUT per resource — drastically
+    -- reducing 429 pressure and draining time under load.
+    local targetOp = op or 'PUT'
+    for i, entry in ipairs(putQueue) do
+      if entry.path == path and (entry.op or 'PUT') == targetOp then
+        entry.data = data
+        drainPutQueue()
+        return
+      end
+    end
     putQueue[#putQueue+1] = {path=path,data=data,op=op}
     drainPutQueue()
   end  
@@ -1190,7 +1203,7 @@ local function main()
   fibaro.event({type='REFRESHED_RESOURCES'},function(ev)
     refreshInFlight = false
     if ev.error then
-      WARNING("/clip/v2/resource %s",ev.error)
+      WARNING("/clip/v2/resource HTTP error: %s",ev.error)
       WARNING("Retry in %ss",refreshBackoff)
       post({type='REFRESH_RESOURCES'},1000*refreshBackoff)
       refreshBackoff = math.min(refreshBackoff * 2, 60)
