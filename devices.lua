@@ -808,23 +808,33 @@ function defClasses()
     local memberCT  = {}
     local memberBri = {}
     self.lastVal = nil  -- last known positive group brightness
+    -- Timestamp of the last explicit command sent to the bridge (ms). Used
+    -- to suppress stale bridge SSE dimming events that arrive out of order
+    -- after rapid command sequences (e.g. turnOn() immediately followed by
+    -- setValue(100) — the bridge's SSE for the turnOn PUT can arrive after
+    -- the setValue SSE and incorrectly overwrite the displayed value).
+    local cmdTime = 0
+    local CMD_INHIBIT_MS = 1500
 
     -- Primary brightness source: the grouped_light resource's own reported
     -- dimming.brightness. The bridge emits this after PUT commands and often
-    -- after scene recalls, and it reflects the bridge's own aggregate (usually
-    -- max of on-members). We use it to update the displayed value but NOT
-    -- lastVal — lastVal is the restore-brightness used when turnOn() is called
-    -- with no argument, and should only be set from explicit user commands
-    -- so that turnOn after a dim scene restores a sensible level.
+    -- after scene recalls. We only apply it when no explicit command was sent
+    -- recently — otherwise stale SSE responses for earlier commands in a
+    -- rapid sequence can overwrite the value the user just set.
     if self.hasDim then
       self.group:subscribe("dimming", function(key, value, _)
         if type(value) == 'number' and value > 0 then
-          if self.properties.state then
+          local age = (os.time()*1000) - cmdTime
+          if age > CMD_INHIBIT_MS and self.properties.state then
             self:updateProperty("value", value)
           end
         end
       end)
     end
+    -- Called by turnOn/turnOff/setValue/setDim to mark that a command was
+    -- just dispatched. Suppresses bridge SSE dimming events for CMD_INHIBIT_MS
+    -- so stale PUT responses cannot overwrite the locally-set value.
+    function self:_stampCmd() cmdTime = os.time()*1000 end
 
     -- Recomputes the room's `color` property as a brightness-weighted RGB
     -- average across all currently-on members. Prefers xy colour over CT
@@ -1028,6 +1038,7 @@ function defClasses()
         dynamics = self.transition and self.transition > 0 and {duration = self.transition} or nil,
       }
       if self.hasDim then cmd.dimming = {brightness = restore} end
+      self:_stampCmd()
       self.group:sendCmd(cmd)
     else
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
@@ -1044,6 +1055,7 @@ function defClasses()
     if cur > 0 then self.lastVal = cur end
     self:updateProperty("value", self.hasDim and 0 or false)
     self:updateProperty("state", false)
+    self:_stampCmd()
     self.group:turnOff(self.transition)
   end
   -- Sets group brightness (0-100).
@@ -1061,6 +1073,7 @@ function defClasses()
     end
     self.lastVal = value
     self:updateProperty("value", value)
+    self:_stampCmd()
     self.group:setDim(value, self.transition)
   end
   -- Starts a smooth ramp up to 100% over self.dimdelay ms (default 8 s).
