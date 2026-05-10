@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.47] - 2026-05-10
+
+## Changes in v0.2.47
+
+- ✨ **Feature**: enhance light and group control with instant off functionality and state management
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.46] - 2026-05-10
 
 ## Changes in v0.2.46
