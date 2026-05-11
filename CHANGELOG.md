@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.48] - 2026-05-11
+
+## Changes in v0.2.48
+
+- ✨ **Feature**: implement cooldown mechanism for concurrent refresh requests in engine.lua
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.47] - 2026-05-10
 
 ## Changes in v0.2.47
