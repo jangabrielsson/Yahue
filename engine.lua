@@ -1202,12 +1202,15 @@ local function main()
   end)
   
   local refreshInFlight = false
+  local refreshBlockedUntil = 0  -- os.time() after which GET is allowed again
   fibaro.event({type='REFRESH_RESOURCES'},function(_)
-    -- Coalesce concurrent refresh requests: if a fetch is already in flight
-    -- (e.g. health-check and error-reconnect both posted REFRESH_RESOURCES at
-    -- the same time) drop the duplicate rather than hammering the bridge with
-    -- a second GET that would also race to retry on 429.
+    -- Coalesce concurrent requests: drop if a GET is already in flight OR if
+    -- we are still inside a 429 backoff cooldown. Multiple sources (watchdog,
+    -- health-check, SSE reconnect) can all post REFRESH_RESOURCES at the same
+    -- time; without the cooldown guard each one fires its own GET the moment
+    -- the previous 429 clears refreshInFlight, producing a rapid 429 storm.
     if refreshInFlight then return end
+    if os.time() < refreshBlockedUntil then return end
     refreshInFlight = true
     hueGET("/clip/v2/resource",'REFRESHED_RESOURCES')
   end)
@@ -1218,11 +1221,13 @@ local function main()
     if ev.error then
       WARNING("/clip/v2/resource HTTP error: %s",ev.error)
       WARNING("Retry in %ss",refreshBackoff)
+      refreshBlockedUntil = os.time() + refreshBackoff  -- block all concurrent sources
       post({type='REFRESH_RESOURCES'},1000*refreshBackoff)
       refreshBackoff = math.min(refreshBackoff * 2, 60)
       return
     end
     refreshBackoff = err_retry
+    refreshBlockedUntil = 0
     -- Mark every existing resource dirty; entries still dirty after we walk
     -- the fresh bridge response are gone from the bridge and should be
     -- removed locally. NOTE: _dirty must be cleared on the resource OBJECT
