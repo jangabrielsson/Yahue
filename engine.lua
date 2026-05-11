@@ -1067,6 +1067,14 @@ local function main()
   local putBaseGap = math.max(0, tonumber(quickApp:getVariable("hueMinGap")) or 100)
   local putGap = putBaseGap
   local putBusy = false
+  -- Consecutive 429s: only start increasing the gap after the 2nd failure in a
+  -- row. A single transient 429 (common when firing 4-5 cmds at once) is just
+  -- retried after a short fixed delay without touching putGap at all.
+  -- Consecutive successes: snap back to putBaseGap after 3 in a row so we
+  -- recover quickly rather than halving the gap one PUT at a time.
+  local consecutiveFails = 0
+  local consecutiveSuccesses = 0
+  local RETRY_DELAY = 250  -- ms for first-429 retry before we touch the gap
   local function sendOne(item, retried)
     DEBUG('call',"%s %s",item.path,json.encode(item.data))
     net.HTTPClient():request(url..item.path,{
@@ -1079,15 +1087,30 @@ local function main()
       },
       success = function(resp)
         if resp.status == 429 and not retried then
-          -- back off and retry once
-          putGap = math.min(putGap == 0 and 200 or putGap * 2, 2000)
-          WARNING("hue PUT HTTP 429 Too Many Requests, throttling to %dms",putGap)
-          setTimeout(function() sendOne(item, true) end, putGap)
+          consecutiveFails = consecutiveFails + 1
+          consecutiveSuccesses = 0
+          if consecutiveFails >= 2 then
+            -- Persistent pressure: widen the gap to reduce throughput.
+            putGap = math.min(putGap == 0 and 200 or putGap * 2, 2000)
+            WARNING("hue PUT HTTP 429 Too Many Requests (%d consecutive), throttling to %dms", consecutiveFails, putGap)
+          else
+            -- First transient 429: retry after a short fixed delay, don't touch gap.
+            WARNING("hue PUT HTTP 429 Too Many Requests, retrying in %dms", RETRY_DELAY)
+          end
+          setTimeout(function() sendOne(item, true) end, consecutiveFails >= 2 and putGap or RETRY_DELAY)
           return
         end
-        -- decay gap back toward base on success
+        -- Success: reset fail streak; snap back to base gap after 3 in a row.
+        consecutiveFails = 0
+        consecutiveSuccesses = consecutiveSuccesses + 1
         if putGap > putBaseGap then
-          putGap = math.max(putBaseGap, math.floor(putGap / 2))
+          if consecutiveSuccesses >= 3 then
+            putGap = putBaseGap
+            consecutiveSuccesses = 0
+            DEBUG('info',"hue PUT gap recovered to %dms", putGap)
+          end
+        else
+          consecutiveSuccesses = 0
         end
         local body = resp.data and json.decode(resp.data)
         if body and body.errors and #body.errors > 0 then
