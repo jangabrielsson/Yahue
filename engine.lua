@@ -1064,7 +1064,7 @@ local function main()
   -- successful PUT we decay the gap back toward the configured minimum.
   ---------------------------------------------------------------------------
   local putQueue = {}
-  local putBaseGap = math.max(0, tonumber(quickApp:getVariable("hueMinGap")) or 100)
+  local putBaseGap = math.max(0, tonumber(quickApp:getVariable("hueMinGap")) or 200)
   local putGap = putBaseGap
   local putBusy = false
   -- Consecutive 429s: only start increasing the gap after the 2nd failure in a
@@ -1075,7 +1075,9 @@ local function main()
   local consecutiveFails = 0
   local consecutiveSuccesses = 0
   local RETRY_DELAY = 250  -- ms for first-429 retry before we touch the gap
-  local function sendOne(item, retried)
+  local MAX_RETRIES = 4    -- give up after this many 429s on one item
+  local function sendOne(item, retryCount)
+    retryCount = retryCount or 0
     DEBUG('call',"%s %s",item.path,json.encode(item.data))
     net.HTTPClient():request(url..item.path,{
       options = {
@@ -1086,25 +1088,34 @@ local function main()
         headers={ ['hue-application-key'] = app_key }
       },
       success = function(resp)
-        if resp.status == 429 and not retried then
+        if resp.status == 429 then
+          if retryCount >= MAX_RETRIES then
+            WARNING("hue PUT HTTP 429 Too Many Requests, giving up after %d retries: %s", MAX_RETRIES, item.path)
+            consecutiveFails = 0
+            return
+          end
           consecutiveFails = consecutiveFails + 1
           consecutiveSuccesses = 0
+          local delay
           if consecutiveFails >= 2 then
             -- Persistent pressure: widen the gap to reduce throughput.
             putGap = math.min(putGap == 0 and 200 or putGap * 2, 2000)
+            delay = putGap
             WARNING("hue PUT HTTP 429 Too Many Requests (%d consecutive), throttling to %dms", consecutiveFails, putGap)
           else
             -- First transient 429: retry after a short fixed delay, don't touch gap.
+            delay = RETRY_DELAY
             WARNING("hue PUT HTTP 429 Too Many Requests, retrying in %dms", RETRY_DELAY)
           end
-          setTimeout(function() sendOne(item, true) end, consecutiveFails >= 2 and putGap or RETRY_DELAY)
+          setTimeout(function() sendOne(item, retryCount + 1) end, delay)
           return
         end
-        -- Success: reset fail streak; snap back to base gap after 3 in a row.
+        -- Success: reset fail streak; only snap back to base gap after 5 in a
+        -- row so we don't recover prematurely while the bridge is still stressed.
         consecutiveFails = 0
         consecutiveSuccesses = consecutiveSuccesses + 1
         if putGap > putBaseGap then
-          if consecutiveSuccesses >= 3 then
+          if consecutiveSuccesses >= 5 then
             putGap = putBaseGap
             consecutiveSuccesses = 0
             DEBUG('info',"hue PUT gap recovered to %dms", putGap)
