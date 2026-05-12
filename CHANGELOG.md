@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.50] - 2026-05-12
+
+## Changes in v0.2.50
+
+- ✨ **Feature**: update cooldown mechanism for handling 429 errors in engine.lua
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.49] - 2026-05-11
 
 ## Changes in v0.2.49
