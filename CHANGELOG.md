@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.52] - 2026-05-18
+
+## Changes in v0.2.52
+
+- ✨ **Feature**: improve error handling for non-2xx HTTP responses and adjust refresh backoff cap
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.51] - 2026-05-18
 
 ## Changes in v0.2.51
