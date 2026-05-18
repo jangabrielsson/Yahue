@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.51] - 2026-05-18
+
+## Changes in v0.2.51
+
+- ✨ **Feature**: enhance error handling for HTTP connection in engine.lua
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.50] - 2026-05-12
 
 ## Changes in v0.2.50
