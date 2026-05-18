@@ -983,6 +983,16 @@ local function main()
       }
       function args.success(res)
         if myEpoch ~= epoch then return end  -- superseded by newer getw()
+        -- A non-2xx response (e.g. 429) means the bridge rejected the
+        -- SSE connection attempt. Treat it like a non-transient error:
+        -- back off and retry. Do NOT reset backoff or update lastSeen —
+        -- the stream is not healthy.
+        if res and res.status and res.status >= 300 then
+          local d = bumpBackoff()
+          WARNING("/eventstream: HTTP %d (retry in %dms)", res.status, d)
+          setTimeout(getw, d)
+          return
+        end
         backoff = 0
         lastSeen = os.time()
         local stat,err = pcall(function()
@@ -1261,7 +1271,7 @@ local function main()
       WARNING("Retry in %ss",refreshBackoff)
       refreshBlockedUntil = os.time() + refreshBackoff  -- block all concurrent sources
       post({type='REFRESH_RESOURCES'},1000*refreshBackoff)
-      refreshBackoff = math.min(refreshBackoff * 2, 60)
+      refreshBackoff = math.min(refreshBackoff * 2, 300)  -- cap at 5 min; 60s was too aggressive when bridge is persistently 429-ing
       return
     end
     refreshBackoff = err_retry
