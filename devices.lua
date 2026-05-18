@@ -254,6 +254,7 @@ function defClasses()
       sc:recall(nil, dynamic)
       -- Persist as the last selected scene so the dropdown can be restored on next startup.
       self:setVariable("lastSceneId", sceneId)
+      self:setVariable("colormode", "scene:" .. sc.name)
     end
   end
   -- Toggles the scene recall mode between static and dynamic. The button
@@ -297,6 +298,7 @@ function defClasses()
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
     local svc = rawget(self,'light')
     if svc and svc.setEffect then svc:setEffect(effect) end
+    self:setVariable("colormode", effect == 'stop' and "" or "effect:" .. effect)
   end
   -- Plays a one-shot timed effect that ends after duration_ms.
   -- effect:   "sunrise"|"sunset"|"stop"
@@ -797,6 +799,7 @@ function defClasses()
     local mirek = kelvinToMirek(value)
     self:print("setColorTemperature %s K -> %s mirek", tostring(value), mirek)
     self.light:setTemperature(mirek)
+    self:setVariable("colormode", "ct")
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
@@ -832,6 +835,7 @@ function defClasses()
     self.light:sendCmd({color={xy={x=x,y=y}}})
     self:updateProperty("color",color)
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
+    self:setVariable("colormode", "xy")
   end
   function ColorLight:setColorComponents(value)
     if type(value)=='table' and value.values then value = value.values[1] end
@@ -847,11 +851,13 @@ function defClasses()
       self.light:sendCmd({color={xy={x=x,y=y}}})
       local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0)
       self:updateProperty("color",color)
+      self:setVariable("colormode", "xy")
     elseif value.warmWhite ~= nil then
       -- Map warmWhite 0-255 to mirek range 153 (6500K cool) to 454 (2200K warm)
       local mirek = math.floor(153 + (w/255)*(454-153))
       self.light:sendCmd({color_temperature={mirek=mirek}})
       self:updateProperty("colorTemperature",mirek)
+      self:setVariable("colormode", "ct")
     end
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=w})
   end
@@ -1144,6 +1150,7 @@ function defClasses()
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
       self:print("Turn on Scene %s (%s)", scene.name, dynamic and "dynamic" or "static")
       scene:recall(nil, dynamic)
+      self:setVariable("colormode", "scene:" .. scene.name)
     end
   end
   -- Turns the entire group off.
@@ -1228,6 +1235,7 @@ function defClasses()
     local mirek = kelvinToMirek(value)
     self:print("setColorTemperature %s K -> %s mirek", tostring(value), mirek)
     self.group:sendCmd({on={on=true}, color_temperature={mirek=mirek}})
+    self:setVariable("colormode", "ct")
   end
   -- Sets color from RRGGBB hex string.
   function RoomZoneQA:setColor(r,g,b,w)
@@ -1245,6 +1253,7 @@ function defClasses()
     self.group:sendCmd({on={on=true}, color={xy={x=x,y=y}}})
     self:updateProperty("color",color)
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=0})
+    self:setVariable("colormode", "xy")
   end
   -- Sets color from a colorComponents table {red,green,blue,warmWhite}.
   function RoomZoneQA:setColorComponents(value)
@@ -1261,10 +1270,12 @@ function defClasses()
       self.group:sendCmd({on={on=true}, color={xy={x=x,y=y}}})
       local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) 
       self:updateProperty("color",color)
+      self:setVariable("colormode", "xy")
     elseif value.warmWhite ~= nil then
       local mirek = math.floor(153 + (w/255)*(454-153))
       self.group:sendCmd({on={on=true}, color_temperature={mirek=mirek}})
       self:updateProperty("colorTemperature",mirek)
+      self:setVariable("colormode", "ct")
     end
     self:updateProperty("colorComponents",{red=r,green=g,blue=b,warmWhite=w})
   end
@@ -1282,6 +1293,7 @@ function defClasses()
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
     local e = effect == 'stop' and 'no_effect' or effect
     self.group:rawCmd({effects={effect=e}})
+    self:setVariable("colormode", effect == 'stop' and "" or "effect:" .. effect)
   end
   function RoomZoneQA.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
