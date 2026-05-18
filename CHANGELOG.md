@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.53] - 2026-05-18
+
+## Changes in v0.2.53
+
+- ✨ **Feature**: add release notes for v0.2.52 and enhance HTTP backoff cap logic
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.52] - 2026-05-18
 
 ## Changes in v0.2.52
