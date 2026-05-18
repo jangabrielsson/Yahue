@@ -1003,7 +1003,11 @@ local function main()
       end
       function args.error(err)
         if myEpoch ~= epoch then return end  -- superseded
+        -- "Operation canceled" means HC3's HTTP stack evicted the SSE
+        -- connection to free a slot for a concurrent PUT/GET to the same
+        -- host.  It is safe to reconnect immediately (no backoff).
         local transient = err == "timeout" or err == "wantread"
+                       or err == "Operation canceled"
         if not transient then
           local d = bumpBackoff()
           WARNING("/eventstream: %s (retry in %dms)", err, d)
