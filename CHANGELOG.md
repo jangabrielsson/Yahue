@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.54] - 2026-05-18
+
+## Changes in v0.2.54
+
+- ✨ **Feature**: add internationalization support and improve UI text handling
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.53] - 2026-05-18
 
 ## Changes in v0.2.53
