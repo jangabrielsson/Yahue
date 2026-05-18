@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.55] - 2026-05-18
+
+## Changes in v0.2.55
+
+- ✨ **Feature**: add colormode tracking for scene and effect changes in devices.lua
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.54] - 2026-05-18
 
 ## Changes in v0.2.54
