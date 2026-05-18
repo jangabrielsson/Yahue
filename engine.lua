@@ -955,7 +955,7 @@ local function main()
     end
     local function bumpBackoff()
       if backoff == 0 then backoff = 1000
-      else backoff = math.min(backoff * 2, 30000) end
+      else backoff = math.min(backoff * 2, 300000) end  -- cap 5 min; matches REFRESH max
       return backoff
     end
     -- HC3's HTTPClient keeps the SSE (text/event-stream) connection open and
@@ -1090,7 +1090,18 @@ local function main()
   local consecutiveSuccesses = 0
   local RETRY_DELAY = 250  -- ms for first-429 retry before we touch the gap
   local MAX_RETRIES = 4    -- give up after this many 429s on one item
-  local function sendOne(item, retryCount)
+  local drainPutQueue  -- forward declaration (sendOne and drainPutQueue are mutually recursive)
+  local sendOne
+  -- advance: release putBusy and drain the next item after `delay` ms.
+  -- All exit paths of sendOne must call this exactly once.
+  local function advance(delay)
+    setTimeout(function()
+      putBusy = false
+      drainPutQueue()
+    end, delay or putGap)
+  end
+
+  sendOne = function(item, retryCount)
     retryCount = retryCount or 0
     DEBUG('call',"%s %s",item.path,json.encode(item.data))
     net.HTTPClient():request(url..item.path,{
@@ -1106,6 +1117,7 @@ local function main()
           if retryCount >= MAX_RETRIES then
             WARNING("hue PUT HTTP 429 Too Many Requests, giving up after %d retries: %s", MAX_RETRIES, item.path)
             consecutiveFails = 0
+            advance()   -- release queue; item is dropped
             return
           end
           consecutiveFails = consecutiveFails + 1
@@ -1121,6 +1133,8 @@ local function main()
             delay = RETRY_DELAY
             WARNING("hue PUT HTTP 429 Too Many Requests, retrying in %dms", RETRY_DELAY)
           end
+          -- Keep putBusy=true through the retry so the next queue item
+          -- cannot start until this one finishes (or gives up).
           setTimeout(function() sendOne(item, retryCount + 1) end, delay)
           return
         end
@@ -1141,22 +1155,23 @@ local function main()
         if body and body.errors and #body.errors > 0 then
           WARNING("hue PUT error, %s - %s",item.path,json.encode(body.errors))
         end
+        advance()
       end,
       error = function(err)
         WARNING("hue call, %s %s - %s",item.path,json.encode(item.data),err)
+        advance()
       end,
     })
   end
-  local function drainPutQueue()
+  function drainPutQueue()
     if putBusy then return end
     local item = table.remove(putQueue, 1)
     if not item then return end
     putBusy = true
     sendOne(item)
-    setTimeout(function()
-      putBusy = false
-      if #putQueue > 0 then drainPutQueue() end
-    end, putGap)
+    -- putBusy is released by sendOne's callbacks (success/error/give-up),
+    -- NOT by a separate timer.  This ensures retries hold the lock and
+    -- prevent the next queue item from starting concurrently.
   end
   -- slot: optional string that scopes last-write-wins dedup independently of
   -- the HTTP op. Callers that must not overwrite each other pass distinct slots
