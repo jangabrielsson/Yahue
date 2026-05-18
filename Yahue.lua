@@ -5,10 +5,12 @@
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
 --%%conceal:Hue_User="<Hue app key>"
+--%%var:language=en
 --%%file:engine.lua,Engine
 --%%file:qwikchild.lua,qwickchild
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
+--%%file:lang.lua,lang
 --%%u:{label='info', text=''}
 --%%u:{label='huedevs', text='Hue devices found:'}
 --%%u:{multi='devSelect', text='Devices', values={}, options={}, onToggled='devSelChanged'}
@@ -50,11 +52,13 @@ end
 local function init()
   local self = quickApp
   if not isEngineReady(HUE) then
-    self:updateView("info","text","Missing engine files")
+    self:updateView("info","text", T("msg.missingEngine"))
     return
   end
   self:debug(HUE.appName,HUE.appVersion)
   self:updateView("info","text",HUE.appName.." v"..HUE.appVersion)
+  self:updateProperty("manufacturer", "Yahue")
+  self:updateProperty("model", HUE.appName.." v"..HUE.appVersion)
 
   fibaro.debugFlags.info=true
   --fibaro.debugFlags.class=true
@@ -64,11 +68,11 @@ local function init()
   ip = ip:match("(%d+.%d+.%d+.%d+)")
   key = key:match("(.+)")
   if not ip then
-    self:updateView("info","text","Set Hue_IP variable then restart")
+    self:updateView("info","text", T("msg.setIP"))
     return
   end
   if not key then
-    self:updateView("info","text","Set Hue_User, or press 'Pair with bridge'")
+    self:updateView("info","text", T("msg.setUser"))
     return
   end
 
@@ -80,11 +84,21 @@ end
 function QuickApp:onInit()
   quickApp = self
   pcall(require, "include.UserConfig")
+  -- Initialise translations before any UI update
+  local lang = self:getVariable("language")
+  fibaro.lang.init(lang ~= "" and lang or "en")
+  -- Apply translated labels to static UI elements
+  self:updateView("huedevs",      "text", T("ui.huedevs"))
+  self:updateView("devSelect",    "text", T("ui.devSelect"))
+  self:updateView("pairHue",      "text", T("ui.pairHue"))
+  self:updateView("restart",      "text", T("ui.restart"))
+  self:updateView("dump",         "text", T("ui.dump"))
+  self:updateView("applyDevices", "text", T("ui.applyDevices"))
   HUE = fibaro.engine
   if isEngineReady(HUE) then 
     init()
   else 
-    self:updateView("info","text","Missing engine files")
+    self:updateView("info","text", T("msg.missingEngine"))
   end
   -- setTimeout(function() -- test signal
   --   print("Start signal for 5sec")
@@ -108,10 +122,10 @@ function QuickApp:pairHue()
   local ip = self:getVariable("Hue_IP")
   ip = ip:match("(%d+.%d+.%d+.%d+)")
   if not ip then
-    self:updateView("info","text","Set Hue_IP first, then press Pair")
+    self:updateView("info","text", T("msg.setIPFirst"))
     return
   end
-  self:updateView("info","text","Press the button on your Hue bridge now…")
+  self:updateView("info","text", T("msg.pressButton"))
   local url = "http://"..ip.."/api"
   local body = json.encode({devicetype="yahue#hc3"})
   local tries = 0
@@ -126,16 +140,16 @@ function QuickApp:pairHue()
         if result and result[1] and result[1].success and result[1].success.username then
           local key = result[1].success.username
           self:setVariable("Hue_User", key)
-          self:updateView("info","text","Paired! Restarting\xe2\x80\xa6")
+          self:updateView("info","text", T("msg.paired"))
           setTimeout(function() plugin.restart() end, 3000)
         elseif tries < maxTries then
           setTimeout(poll, 2000)
         else
-          self:updateView("info","text","Timed out — press Pair and try again")
+          self:updateView("info","text", T("msg.timedOut"))
         end
       end,
       error = function(err)
-        self:updateView("info","text","Pair error: "..tostring(err))
+        self:updateView("info","text", T("msg.pairError")..tostring(err))
       end
     })
   end

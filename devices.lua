@@ -213,6 +213,15 @@ function defClasses()
       end
       self:updateProperty("userDescription",d)
     end
+    if self.dev.product_data then
+      local pd = self.dev.product_data
+      if pd.manufacturer_name and pd.manufacturer_name ~= "" then
+        self:updateProperty("manufacturer", pd.manufacturer_name)
+      end
+      if pd.model_id and pd.model_id ~= "" then
+        self:updateProperty("model", pd.model_id)
+      end
+    end
   end
   -- Override in subclasses to send raw Hue API commands.
   function HueClass:hueCommand(tab)
@@ -253,7 +262,7 @@ function defClasses()
   function HueClass:sceneModeToggle()
     local mode = self:getVariable("sceneMode") == "dynamic" and "static" or "dynamic"
     self:setVariable("sceneMode", mode)
-    self:updateView("sceneMode", "text", mode == "dynamic" and "Dynamic" or "Static")
+    self:updateView("sceneMode", "text", mode == "dynamic" and T("ui.dynamic") or T("ui.static"))
     self:print("Scene mode: %s", mode)
   end
   -- Triggers a signaling effect on the light or group.
@@ -280,9 +289,9 @@ function defClasses()
       svc:signal(sig, duration_ms, colors)
     end
   end
-  -- Sets a continuous looping effect on the light.
+  -- Sets a continuous looping effect on the light or room/zone group.
   -- effect: "fire"|"candle"|"sparkle"|"glisten"|"prism"|"opal"|"underwater"|"cosmos"|"sunbeam"|"enchant"|"stop"
-  -- "stop" cancels any active effect. Not supported on room/zone devices.
+  -- "stop" cancels any active effect.
   -- Example: child:setEffect("fire")  /  child:setEffect("stop")
   function HueClass:setEffect(effect)
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
@@ -300,6 +309,18 @@ function defClasses()
     end
     local svc = rawget(self,'light')
     if svc and svc.setTimedEffect then svc:setTimedEffect(effect, duration_ms) end
+  end
+  -- Effect UI button callbacks – one method per Hue looping effect.
+  -- Buttons in ColorLight and RoomZoneQA children call these directly.
+  do
+    local _eff = {
+      effFire='fire', effCandle='candle', effSparkle='sparkle', effGlisten='glisten',
+      effPrism='prism', effOpal='opal',   effUnder='underwater', effCosmos='cosmos',
+      effSunbeam='sunbeam', effEnchant='enchant', effStop='stop',
+    }
+    for fname, eff in pairs(_eff) do
+      HueClass[fname] = function(self) self:setEffect(eff) end
+    end
   end
   -- Sends a raw Hue v2 API command table directly to the underlying light or
   -- group service. Useful for effects not exposed by the standard QA methods,
@@ -329,10 +350,33 @@ function defClasses()
     if svc and svc.fadeTo then svc:fadeTo(from,to,duration) end
   end
 
+  -- Adds the three effect-button rows (4+4+3) to rsrc.UI.
+  -- Used by ColorLight, RoomZoneQA, RoomZoneDimQA and RoomZoneSwitchQA annotate().
+  local function addEffectButtons(rsrc)
+    rsrc.UI = rsrc.UI or {}
+    table.insert(rsrc.UI, {
+      {button='effFire',    text='🔥', onReleased='effFire'},
+      {button='effCandle',  text='🕯️', onReleased='effCandle'},
+      {button='effSparkle', text='✨', onReleased='effSparkle'},
+      {button='effGlisten', text='💎', onReleased='effGlisten'},
+    })
+    table.insert(rsrc.UI, {
+      {button='effPrism',   text='🌈', onReleased='effPrism'},
+      {button='effOpal',    text='🔮', onReleased='effOpal'},
+      {button='effUnder',   text='🌊', onReleased='effUnder'},
+      {button='effCosmos',  text='🌌', onReleased='effCosmos'},
+    })
+    table.insert(rsrc.UI, {
+      {button='effSunbeam', text='☀️',  onReleased='effSunbeam'},
+      {button='effEnchant', text='🪄',  onReleased='effEnchant'},
+      {button='effStop',    text='⏹️', onReleased='effStop'},
+    })
+  end
+
   -- Finds all scenes whose group is this room/zone resource directly.
   local function loadScenesForRoom(child)
     local groupId = child.uid
-    local options = {{type='option', text='- None -', value=''}}
+    local options = {{type='option', text=T("ui.none"), value=''}}
     for id, sc in pairs(HUE:getResourceType('scene')) do
       if sc.rsrc and sc.rsrc.group and sc.rsrc.group.rid == groupId then
         options[#options+1] = {type='option', text=sc.name, value=id}
@@ -763,6 +807,7 @@ function defClasses()
   -- ─────────────────────────────────────────────────────────────────────────
   class 'ColorLight'(DimmableLight)
   ColorLight.htype = "com.fibaro.colorController"
+  ColorLight.uiVersion = 1
   function ColorLight:__init(device)
     DimmableLight.__init(self,device)
     self.dev:subscribe("color",function(key,value,b)
@@ -817,6 +862,7 @@ function defClasses()
     table.insert(rsrc.interfaces,"levelChange")
     rsrc.properties = rsrc.properties or {}
     rsrc.properties.colorComponents = {red=0,green=0,blue=0,warmWhite=0}
+    addEffectButtons(rsrc)
   end
   
   -- ─────────────────────────────────────────────────────────────────────────
@@ -837,7 +883,7 @@ function defClasses()
   -- Bump this whenever RoomZoneQA.annotate's UI table changes; existing
   -- children with a lower stored uiVersion will be patched in place at
   -- startup and the QA will restart once.
-  RoomZoneQA.uiVersion = 4
+  RoomZoneQA.uiVersion = 5
   function RoomZoneQA:__init(device)
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
@@ -1058,7 +1104,7 @@ function defClasses()
 
     self.dev:publishAll()
     loadScenesForRoom(self)
-    local mode = self:getVariable("sceneMode") == "dynamic" and "Dynamic" or "Static"
+    local mode = self:getVariable("sceneMode") == "dynamic" and T("ui.dynamic") or T("ui.static")
     self:updateView("sceneMode", "text", mode)
   end
   
@@ -1230,6 +1276,13 @@ function defClasses()
     end
     return nil
   end
+  -- Sends a looping effect to the grouped_light service so rooms/zones are
+  -- also supported. Overrides HueClass:setEffect which targets individual lights.
+  function RoomZoneQA:setEffect(effect)
+    if type(effect) == 'table' then effect = (effect.values or effect)[1] end
+    local e = effect == 'stop' and 'no_effect' or effect
+    self.group:rawCmd({effects={effect=e}})
+  end
   function RoomZoneQA.annotate(rsrc)
     rsrc.interfaces = rsrc.interfaces or {}
     table.insert(rsrc.interfaces,"levelChange")
@@ -1239,9 +1292,11 @@ function defClasses()
     rsrc.properties.colorComponents = {red=0,green=0,blue=0,warmWhite=0}
     rsrc.UI = rsrc.UI or {}
     table.insert(rsrc.UI, {
-      {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}},
-      {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
+      {select='sceneSelect', text=T("ui.scene"), value='', onToggled='sceneChanged', options={}}})
+    table.insert(rsrc.UI, {
+      {button='sceneMode', text=T("ui.static"), onReleased='sceneModeToggle'},
     })
+    addEffectButtons(rsrc)
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
@@ -1253,7 +1308,7 @@ function defClasses()
   RoomZoneDimQA.htype    = "com.fibaro.multilevelSwitch"
   RoomZoneDimQA.hasColor = false
   RoomZoneDimQA.hasDim   = true
-  RoomZoneDimQA.uiVersion = 4
+  RoomZoneDimQA.uiVersion = 5
   -- Fibaro's `class` system looks up __init via rawget on the subclass
   -- itself (it does not walk __index), so a subclass without its own
   -- __init raises "attempt to call a nil value" at construction time.
@@ -1264,9 +1319,11 @@ function defClasses()
     table.insert(rsrc.interfaces,"levelChange")
     rsrc.UI = rsrc.UI or {}
     table.insert(rsrc.UI, {
-      {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}},
-      {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
+      {select='sceneSelect', text=T("ui.scene"), value='', onToggled='sceneChanged', options={}}})
+    table.insert(rsrc.UI, {
+      {button='sceneMode', text=T("ui.static"), onReleased='sceneModeToggle'},
     })
+    addEffectButtons(rsrc)
   end
 
   -- ─────────────────────────────────────────────────────────────────────────
@@ -1277,16 +1334,18 @@ function defClasses()
   RoomZoneSwitchQA.htype    = "com.fibaro.binarySwitch"
   RoomZoneSwitchQA.hasColor = false
   RoomZoneSwitchQA.hasDim   = false
-  RoomZoneSwitchQA.uiVersion = 4
+  RoomZoneSwitchQA.uiVersion = 5
   -- See RoomZoneDimQA above: explicit __init delegator is required by
   -- Fibaro's class system (no __index walk for __init).
   function RoomZoneSwitchQA:__init(device) RoomZoneQA.__init(self, device) end
   function RoomZoneSwitchQA.annotate(rsrc)
     rsrc.UI = rsrc.UI or {}
     table.insert(rsrc.UI, {
-      {select='sceneSelect', text='Scene', value='', onToggled='sceneChanged', options={}},
-      {button='sceneMode', text='Static', onReleased='sceneModeToggle'},
+      {select='sceneSelect', text=T("ui.scene"), value='', onToggled='sceneChanged', options={}}})
+    table.insert(rsrc.UI, {
+      {button='sceneMode', text=T("ui.static"), onReleased='sceneModeToggle'},
     })
+    addEffectButtons(rsrc)
   end
 
 end
