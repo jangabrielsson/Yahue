@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.56] - 2026-05-20
+
+## Changes in v0.2.56
+
+- ✨ **Feature**: implement bridge rate-limit governor to handle HTTP 429 responses
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.55] - 2026-05-18
 
 ## Changes in v0.2.55
