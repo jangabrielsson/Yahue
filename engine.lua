@@ -32,6 +32,8 @@ local function setup()
 end
 local function strip(l) local r={} for k,v in pairs(l) do r[#r+1]=k end return r end
 
+local enterCooldown, parseRetryAfter, cooldownDefault
+
 --[[
 debug.info          -- greetings etc
 debug.class         -- class creation
@@ -885,6 +887,23 @@ local function main()
       return backoff
     end
     function args.success(res)
+      -- Emu/plua path: a long-poll style GET. If the bridge rejects with
+      -- 429 the body is not JSON; route it through the governor so the
+      -- local dev session sees the same cooldown behavior as HC3.
+      if res and res.status and res.status >= 300 then
+        if res.status == 429 then
+          local ra = parseRetryAfter(res)
+          enterCooldown(ra, "SSE")
+          local d = math.max(bridgeWaitMs(), bumpBackoff())
+          WARNING("/eventstream: HTTP 429 (retry in %dms)", d)
+          setTimeout(getw, d)
+        else
+          local d = math.max(bridgeWaitMs(), bumpBackoff())
+          WARNING("/eventstream: HTTP %d (retry in %dms)", res.status, d)
+          setTimeout(getw, d)
+        end
+        return
+      end
       backoff = 0
       local ok,err = pcall(function()
         local data = json.decode(res.data)
@@ -978,7 +997,12 @@ local function main()
             ["hue-application-key"] = app_key,
             ['Accept'] = "text/event-stream"
           },
-          timeout = 2000
+          -- SSE is a long-lived stream. A short timeout (e.g. 2000ms) causes
+          -- plua to forcibly close & deliver a "timeout" error every 2s,
+          -- producing a reconnect loop that the bridge eventually 429s.
+          -- Hue sends a `: hi` keep-alive every ~10s; 60s is well past that
+          -- and still short enough to recover from a silently-dead socket.
+          timeout = 60000
         }
       }
       function args.success(res)
@@ -988,9 +1012,17 @@ local function main()
         -- back off and retry. Do NOT reset backoff or update lastSeen —
         -- the stream is not healthy.
         if res and res.status and res.status >= 300 then
-          local d = bumpBackoff()
-          WARNING("/eventstream: HTTP %d (retry in %dms)", res.status, d)
-          setTimeout(getw, d)
+          if res.status == 429 then
+            local ra = parseRetryAfter(res)
+            enterCooldown(ra, "SSE")
+            local d = math.max(bridgeWaitMs(), bumpBackoff())
+            WARNING("/eventstream: HTTP 429 (retry in %dms)", d)
+            setTimeout(getw, d)
+          else
+            local d = math.max(bridgeWaitMs(), bumpBackoff())
+            WARNING("/eventstream: HTTP %d (retry in %dms)", res.status, d)
+            setTimeout(getw, d)
+          end
           return
         end
         backoff = 0
@@ -1013,14 +1045,28 @@ local function main()
       end
       function args.error(err)
         if myEpoch ~= epoch then return end  -- superseded
+        -- plua's HTTPClient delivers HTTP errors (incl. 429) into the
+        -- error callback as a string like "HTTP 429: <html>..." rather
+        -- than through success+res.status. Detect that here and route to
+        -- the governor so the cooldown lines up with PUT/refresher.
+        local errStr = tostring(err or "")
+        if errStr:find("429", 1, true) then
+          enterCooldown(nil, "SSE")
+          local d = math.max(bridgeWaitMs(), bumpBackoff())
+          WARNING("/eventstream: HTTP 429 (retry in %dms)", d)
+          setTimeout(getw, d)
+          return
+        end
         -- "Operation canceled" means HC3's HTTP stack evicted the SSE
         -- connection to free a slot for a concurrent PUT/GET to the same
         -- host.  It is safe to reconnect immediately (no backoff).
         local transient = err == "timeout" or err == "wantread"
                        or err == "Operation canceled"
         if not transient then
-          local d = bumpBackoff()
-          WARNING("/eventstream: %s (retry in %dms)", err, d)
+          local d = math.max(bridgeWaitMs(), bumpBackoff())
+          -- Trim noisy HTML/whitespace from the error string for the log.
+          local short = errStr:gsub("%s+", " "):sub(1, 120)
+          WARNING("/eventstream: %s (retry in %dms)", short, d)
           -- After the first non-transient failure (backoff > min) we have
           -- almost certainly missed bridge events while the socket was
           -- broken. Force a resource refresh + re-publish on the next
@@ -1031,7 +1077,11 @@ local function main()
           end
           setTimeout(getw, d)
         else
-          getw()
+          -- Transient (timeout / canceled / EOF on plua). Reconnect with a
+          -- minimum gap to avoid hammering the bridge if the stream is
+          -- closing immediately every time (which earns us a 429 silently).
+          DEBUG('info', "/eventstream transient: %s, reconnecting in 1s", tostring(err))
+          setTimeout(getw, 1000)
         end
       end
       net.HTTPClient():request(eurl,args)
@@ -1041,7 +1091,7 @@ local function main()
   
   if fibaro.plua then fetchEvents = fetchEvents_emu
   else fetchEvents = fetchEvents_hc3 end
-  
+  fetchEvents = fetchEvents_hc3
   ---------------------------------------------------------------------------
   -- HTTP TRANSPORT
   ---------------------------------------------------------------------------
@@ -1060,7 +1110,7 @@ local function main()
         if res.status < 300 then
           post({type=event,result=json.decode(res.data)}) 
         else
-          post({type=event,error=res.status}) 
+          post({type=event,error={status=res.status, retryAfter=parseRetryAfter(res)}})
         end
       end,
       error = function(err) post({type=event,error=err})  end,
@@ -1068,126 +1118,230 @@ local function main()
   end
   
   ---------------------------------------------------------------------------
-  -- huePUT pacer
-  -- Hue v2 bridges rate-limit ~10 cmd/s for lights and ~1 cmd/s for groups.
-  -- A QA that fires many turnOn/setValue/setColor at startup will get 429
-  -- responses and the bridge will then drop further calls for some time.
-  -- We serialize PUTs through a FIFO queue with a min gap between sends.
-  -- Min gap is configurable via QA variable `hueMinGap` (ms), default 100.
-  -- On 429 we double the gap (cap 2s) and re-queue at the front; on any
-  -- successful PUT we decay the gap back toward the configured minimum.
+  -- BRIDGE RATE-LIMIT GOVERNOR
+  --
+  -- Single source of truth for "is the Hue bridge accepting traffic?".
+  -- Any 429 from ANY code path (PUT pacer, SSE getw, refresher GET) flips us
+  -- into a cooldown window during which:
+  --   * new huePUT submissions are dropped (caller gets false)
+  --   * pending queues for every bucket are cleared (stale by recovery time)
+  --   * SSE/refresher reconnects defer to the same wake-up time
+  --
+  -- We honor the bridge's `Retry-After` header when present, else use a
+  -- short baseline (5s) which usually clears the bridge. The default only
+  -- escalates when 429s CLUSTER (>=ESCALATE_THRESHOLD inside ESCALATE_WINDOW_S),
+  -- so a single isolated 429 costs ~5s instead of triggering a multi-minute
+  -- back-off curve. The default resets to COOLDOWN_BASE after
+  -- HEALTH_RESET_S of continuous health.
   ---------------------------------------------------------------------------
-  local putQueue = {}
-  local putBaseGap = math.max(0, tonumber(quickApp:getVariable("hueMinGap")) or 200)
-  local putGap = putBaseGap
-  local putBusy = false
-  -- Consecutive 429s: only start increasing the gap after the 2nd failure in a
-  -- row. A single transient 429 (common when firing 4-5 cmds at once) is just
-  -- retried after a short fixed delay without touching putGap at all.
-  -- Consecutive successes: snap back to putBaseGap after 3 in a row so we
-  -- recover quickly rather than halving the gap one PUT at a time.
-  local consecutiveFails = 0
-  local consecutiveSuccesses = 0
-  local RETRY_DELAY = 250  -- ms for first-429 retry before we touch the gap
-  local MAX_RETRIES = 4    -- give up after this many 429s on one item
-  local drainPutQueue  -- forward declaration (sendOne and drainPutQueue are mutually recursive)
-  local sendOne
-  -- advance: release putBusy and drain the next item after `delay` ms.
-  -- All exit paths of sendOne must call this exactly once.
-  local function advance(delay)
-    setTimeout(function()
-      putBusy = false
-      drainPutQueue()
-    end, delay or putGap)
+  local COOLDOWN_BASE = 5            -- seconds; baseline cool-off after a 429
+  local COOLDOWN_MAX = 60            -- seconds; cap on escalation
+  local HEALTH_RESET_S = 120         -- 2 minutes of health resets escalation
+  local ESCALATE_WINDOW_S = 60       -- look-back window for clustered 429s
+  local ESCALATE_THRESHOLD = 3       -- need >=N 429s in window to escalate
+  local bridgeHealthy = true
+  local bridgeCoolUntil = 0          -- os.time() when traffic may resume
+  local bridgeNoticeAt = 0           -- last os.time() we logged a cooldown
+  local bridgeLastHealthy = os.time()
+  local cooldownDefault = COOLDOWN_BASE
+  local recent429 = {}               -- ring of os.time() of recent 429s
+
+  function parseRetryAfter(resp)
+    local h = resp and resp.headers
+    if type(h) == 'table' then
+      local v = h['Retry-After'] or h['retry-after'] or h['RETRY-AFTER']
+      if v then
+        local n = tonumber(tostring(v):match("(%d+)"))
+        if n and n > 0 then return n end
+      end
+    end
+    return nil
   end
 
-  sendOne = function(item, retryCount)
-    retryCount = retryCount or 0
-    DEBUG('call',"%s %s",item.path,json.encode(item.data))
-    net.HTTPClient():request(url..item.path,{
+  function enterCooldown(seconds, source)
+    -- Track 429s within the look-back window. Drop stale entries first.
+    local now = os.time()
+    local kept = {}
+    for _, t in ipairs(recent429) do
+      if now - t <= ESCALATE_WINDOW_S then kept[#kept+1] = t end
+    end
+    kept[#kept+1] = now
+    recent429 = kept
+    -- Escalate only when 429s cluster. A single isolated 429 keeps the
+    -- baseline cool-off so recovery is fast.
+    if not seconds and #recent429 >= ESCALATE_THRESHOLD then
+      cooldownDefault = math.min(cooldownDefault * 2, COOLDOWN_MAX)
+    end
+    local secs = seconds or cooldownDefault
+    local until_ = now + secs
+    if until_ > bridgeCoolUntil then bridgeCoolUntil = until_ end
+    bridgeHealthy = false
+    -- Throttle the warning to at most one per 10s so we don't flood the log.
+    if now - bridgeNoticeAt >= 10 then
+      bridgeNoticeAt = now
+      WARNING("Hue bridge 429 from %s, pausing all traffic for %ds (recent 429s: %d)",
+        source or 'PUT', secs, #recent429)
+    end
+  end
+
+  local function bridgeReady()
+    if bridgeHealthy then
+      -- Reset escalation only after a sustained healthy run.
+      if cooldownDefault > COOLDOWN_BASE and (os.time() - bridgeLastHealthy) >= HEALTH_RESET_S then
+        cooldownDefault = COOLDOWN_BASE
+        recent429 = {}
+        DEBUG('info', "Hue cooldown default reset to %ds", cooldownDefault)
+      end
+      return true
+    end
+    if os.time() >= bridgeCoolUntil then
+      bridgeHealthy = true
+      bridgeLastHealthy = os.time()
+      DEBUG('info', "Hue bridge cooldown elapsed, resuming")
+      return true
+    end
+    return false
+  end
+
+  -- ms until the global cooldown elapses (0 when healthy). Use this to
+  -- align any retry timer with the governor so SSE/refresher don't hit the
+  -- bridge again while it is still in a 429 window.
+  -- NOTE: declared as a global (no `local`) because SSE/refresh callbacks
+  -- defined earlier in this file reference it; a local would not be in
+  -- scope at those source positions.
+  function bridgeWaitMs()
+    if bridgeHealthy then return 0 end
+    local d = bridgeCoolUntil - os.time()
+    if d < 1 then d = 1 end
+    return d * 1000
+  end
+
+  ---------------------------------------------------------------------------
+  -- TOKEN BUCKETS PER RESOURCE FAMILY
+  --
+  -- Hue v2 limits: ~10/s for individual lights, ~1/s for grouped_light and
+  -- scene recall (which fans out to a group cmd under the hood). One bucket
+  -- per family means a flurry of light cmds does not starve a single group
+  -- cmd. Each bucket has its own FIFO; sends are paced by `refillMs`.
+  ---------------------------------------------------------------------------
+  local QUEUE_TTL_S = 5              -- drop items older than this on dequeue
+  local QUEUE_CAP   = 30             -- per-bucket cap; oldest dropped at cap
+  local MAX_RETRIES = 2              -- per item; total worst-case ~1s wasted
+  local RETRY_DELAY_MS = 500         -- between item retries (pre-cooldown)
+  local BUCKETS = {
+    light          = { refillMs = 125,  queue = {}, inFlight = false },  -- 8/s
+    grouped_light  = { refillMs = 1000, queue = {}, inFlight = false },  -- 1/s
+    scene          = { refillMs = 1000, queue = {}, inFlight = false },  -- 1/s
+    other          = { refillMs = 500,  queue = {}, inFlight = false },  -- 2/s
+  }
+
+  local function bucketFor(path)
+    local fam = path:match("/resource/([%w_]+)/")
+    return BUCKETS[fam] or BUCKETS.other
+  end
+
+  local function clearAllQueues(reason)
+    for fam, b in pairs(BUCKETS) do
+      if #b.queue > 0 then
+        DEBUG('call', "Hue queue purge (%s): %d items from %s", reason, #b.queue, fam)
+        b.queue = {}
+      end
+    end
+  end
+
+  local tickBucket, sendOne
+
+  sendOne = function(b, item, retryCount)
+    DEBUG('call', "%s %s", item.path, json.encode(item.data))
+    net.HTTPClient():request(url..item.path, {
       options = {
-        method=item.op or 'PUT',
-        data=item.data and json.encode(item.data) or nil,
-        checkCertificate=false,
-        ['content-type']="application/json",
-        headers={ ['hue-application-key'] = app_key }
+        method = item.op or 'PUT',
+        data = item.data and json.encode(item.data) or nil,
+        checkCertificate = false,
+        ['content-type'] = "application/json",
+        headers = { ['hue-application-key'] = app_key }
       },
       success = function(resp)
         if resp.status == 429 then
           if retryCount >= MAX_RETRIES then
-            WARNING("hue PUT HTTP 429 Too Many Requests, giving up after %d retries: %s", MAX_RETRIES, item.path)
-            consecutiveFails = 0
-            advance()   -- release queue; item is dropped
-            return
+            WARNING("hue PUT 429 give-up after %d retries: %s", MAX_RETRIES, item.path)
+            enterCooldown(parseRetryAfter(resp), "PUT")
+            -- Bridge is in real distress: drop ALL pending traffic. Whatever
+            -- ends up sent after recovery should reflect current intent, not
+            -- a stale backlog that would cause ghost transitions.
+            clearAllQueues("PUT cooldown")
+            b.inFlight = false
+            return  -- queues empty; nothing to tick
           end
-          consecutiveFails = consecutiveFails + 1
-          consecutiveSuccesses = 0
-          local delay
-          if consecutiveFails >= 2 then
-            -- Persistent pressure: widen the gap to reduce throughput.
-            putGap = math.min(putGap == 0 and 200 or putGap * 2, 2000)
-            delay = putGap
-            WARNING("hue PUT HTTP 429 Too Many Requests (%d consecutive), throttling to %dms", consecutiveFails, putGap)
-          else
-            -- First transient 429: retry after a short fixed delay, don't touch gap.
-            delay = RETRY_DELAY
-            WARNING("hue PUT HTTP 429 Too Many Requests, retrying in %dms", RETRY_DELAY)
-          end
-          -- Keep putBusy=true through the retry so the next queue item
-          -- cannot start until this one finishes (or gives up).
-          setTimeout(function() sendOne(item, retryCount + 1) end, delay)
+          setTimeout(function() sendOne(b, item, retryCount + 1) end, RETRY_DELAY_MS)
           return
-        end
-        -- Success: reset fail streak; only snap back to base gap after 5 in a
-        -- row so we don't recover prematurely while the bridge is still stressed.
-        consecutiveFails = 0
-        consecutiveSuccesses = consecutiveSuccesses + 1
-        if putGap > putBaseGap then
-          if consecutiveSuccesses >= 5 then
-            putGap = putBaseGap
-            consecutiveSuccesses = 0
-            DEBUG('info',"hue PUT gap recovered to %dms", putGap)
-          end
-        else
-          consecutiveSuccesses = 0
         end
         local body = resp.data and json.decode(resp.data)
         if body and body.errors and #body.errors > 0 then
-          WARNING("hue PUT error, %s - %s",item.path,json.encode(body.errors))
+          WARNING("hue PUT error, %s - %s", item.path, json.encode(body.errors))
         end
-        advance()
+        b.inFlight = false
+        setTimeout(function() tickBucket(b) end, b.refillMs)
       end,
       error = function(err)
-        WARNING("hue call, %s %s - %s",item.path,json.encode(item.data),err)
-        advance()
+        WARNING("hue call, %s %s - %s", item.path, json.encode(item.data), err)
+        b.inFlight = false
+        setTimeout(function() tickBucket(b) end, b.refillMs)
       end,
     })
   end
-  function drainPutQueue()
-    if putBusy then return end
-    local item = table.remove(putQueue, 1)
+
+  tickBucket = function(b)
+    if b.inFlight then return end
+    if not bridgeReady() then
+      -- Drop stale items rather than holding them through a long cooldown.
+      b.queue = {}
+      return
+    end
+    -- Drop items that have aged past TTL.
+    while b.queue[1] and (os.time() - b.queue[1].enqueuedAt) > QUEUE_TTL_S do
+      local stale = table.remove(b.queue, 1)
+      DEBUG('call', "Hue queue TTL drop: %s", stale.path)
+    end
+    local item = table.remove(b.queue, 1)
     if not item then return end
-    putBusy = true
-    sendOne(item)
-    -- putBusy is released by sendOne's callbacks (success/error/give-up),
-    -- NOT by a separate timer.  This ensures retries hold the lock and
-    -- prevent the next queue item from starting concurrently.
+    b.inFlight = true
+    sendOne(b, item, 0)
   end
-  -- slot: optional string that scopes last-write-wins dedup independently of
-  -- the HTTP op. Callers that must not overwrite each other pass distinct slots
-  -- (e.g. 'setDim' vs default 'PUT'). Same slot on the same path collapses.
-  function huePUT(path,data,op,slot)
+
+  -- huePUT(path, data, op, slot) -> true | false
+  --   Returns false when the bridge is in a cooldown window (caller should
+  --   not retry immediately; the next user action will work after recovery).
+  -- slot: optional string for last-write-wins dedup independent of HTTP op
+  --   (e.g. 'setDim' vs default 'PUT'). Same slot + same path collapses.
+  function huePUT(path, data, op, slot)
+    if not bridgeReady() then
+      DEBUG('call', "huePUT dropped (bridge cooldown %ds left): %s",
+        bridgeCoolUntil - os.time(), path)
+      return false
+    end
+    local b = bucketFor(path)
     local dedupKey = slot or op or 'PUT'
-    for i, entry in ipairs(putQueue) do
+    for _, entry in ipairs(b.queue) do
       if entry.path == path and entry.slot == dedupKey then
         entry.data = data
-        drainPutQueue()
-        return
+        entry.enqueuedAt = os.time()
+        tickBucket(b)
+        return true
       end
     end
-    putQueue[#putQueue+1] = {path=path,data=data,op=op,slot=dedupKey}
-    drainPutQueue()
-  end  
+    if #b.queue >= QUEUE_CAP then
+      local dropped = table.remove(b.queue, 1)
+      DEBUG('call', "Hue queue cap reached, dropped oldest: %s", dropped.path)
+    end
+    b.queue[#b.queue + 1] = {
+      path = path, data = data, op = op, slot = dedupKey,
+      enqueuedAt = os.time(),
+    }
+    tickBucket(b)
+    return true
+  end
+  
   --[[
   {
   "dimming":{"brightness":58.66}, // color,color_temperature,on
@@ -1282,10 +1436,23 @@ local function main()
   fibaro.event({type='REFRESHED_RESOURCES'},function(ev)
     refreshInFlight = false
     if ev.error then
-      WARNING("/clip/v2/resource HTTP error: %s",ev.error)
-      WARNING("Retry in %ss",refreshBackoff)
-      refreshBlockedUntil = os.time() + refreshBackoff  -- block all concurrent sources
-      post({type='REFRESH_RESOURCES'},1000*refreshBackoff)
+      local status, retryAfter
+      if type(ev.error) == 'table' then
+        status, retryAfter = ev.error.status, ev.error.retryAfter
+      else
+        status = ev.error
+      end
+      local cool = retryAfter or refreshBackoff
+      if tonumber(status) == 429 then enterCooldown(retryAfter, "GET refresh") end
+      -- Honor the global cooldown: never re-post REFRESH before the
+      -- governor has cleared, otherwise the refresher would keep dogpiling
+      -- the bridge on its own 3->6->12->24s curve during a 30s+ cooldown.
+      local waitMs = math.max(1000 * cool, bridgeWaitMs())
+      local effectiveS = math.floor(waitMs / 1000)
+      WARNING("/clip/v2/resource HTTP error: %s", tostring(status))
+      WARNING("Retry in %ss", effectiveS)
+      refreshBlockedUntil = os.time() + effectiveS  -- block all concurrent sources
+      post({type='REFRESH_RESOURCES'}, waitMs)
       refreshBackoff = math.min(refreshBackoff * 2, 300)  -- cap at 5 min; 60s was too aggressive when bridge is persistently 429-ing
       return
     end
