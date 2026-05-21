@@ -100,6 +100,7 @@ function QuickApp:onInit()
   else 
     self:updateView("info","text", T("msg.missingEngine"))
   end
+  -- setTimeout(function() self:pingSSE() end, 5000)
   -- setTimeout(function() -- test signal
   --   print("Start signal for 5sec")
   --   fibaro.call(4222, "signal", "alternating", 30000, {"FF0000","0000FF"}) 
@@ -107,6 +108,13 @@ function QuickApp:onInit()
 end
 
 function QuickApp:restart() plugin.restart() end
+function QuickApp:pingSSE()
+  if not isEngineReady(HUE) then self:error("HUE not ready") return end
+  HUE:pingSSE(10, function(ok, info)
+    if ok then self:debug(string.format("pingSSE OK: echo in ~%ss", tostring(info)))
+    else self:warning(string.format("pingSSE FAIL: %s", tostring(info))) end
+  end)
+end
 function QuickApp:dumpResources()
   if isEngineReady(HUE) and HUE.listAllDevicesGrouped then HUE:listAllDevicesGrouped() end
 end

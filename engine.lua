@@ -113,6 +113,8 @@ local function main()
   local resources = {}
   local props,meths={},{}
   local hueGET,huePUT
+  -- SSE liveness probe: { id, t0, expects, timer, cb } while a probe is in flight.
+  local _sseProbe = nil
   local app_key,url,callBack
   local fmt = string.format
   local merge = keyMerge
@@ -842,6 +844,18 @@ local function main()
     for _,e1 in ipairs(data) do
       if e1.type=='update' then
         for _,r in ipairs(e1.data) do
+          -- SSE liveness probe: detect echo of our no-op PUT before normal
+          -- dispatch. We accept ANY update event referencing the probe id
+          -- (the bridge may emit a service-level event with a different
+          -- type than the resource we PUT to).
+          if _sseProbe and (r.id == _sseProbe.id or r.owner and r.owner.rid == _sseProbe.id) then
+            local probe = _sseProbe
+            _sseProbe = nil
+            if probe.timer then clearTimeout(probe.timer) end
+            local rtt = os.time() - probe.t0
+            WARNING("SSE ping: echo received in ~%ds (id=%s type=%s)", rtt, r.id, r.type or "?")
+            if probe.cb then pcall(probe.cb, true, rtt) end
+          end
           local d = resources.get(r.id)
           if d and d.event then
             DEBUG('all_event',"Event id:%s type:%s",d.id,d.type)
@@ -930,48 +944,18 @@ local function main()
     local getw
     local eurl = url.."/eventstream/clip/v2"
     local backoff = 0   -- ms; grows on consecutive errors, reset on success
-    -- Watchdog: the SSE TCP socket can in theory go silently half-dead (router
-    -- NAT timeout, Wi-Fi blip, bridge restart) so neither success nor error
-    -- ever fires again. Hue sends a `: hi` keep-alive at least every ~30s,
-    -- so if we see nothing for WATCHDOG_MS we force a reconnect.
-    -- Disabled by default (sseWatchdog=0). Earlier "silent stoppage" reports
-    -- turned out to be the assert-in-delete bug, not actually-dead sockets,
-    -- and reconnecting a healthy SSE stream just churns the bridge.
-    -- Set the QA variable `sseWatchdog` to a number of seconds (e.g. 300) to
-    -- enable.
-    local watchdogSec = tonumber(quickApp:getVariable("sseWatchdog")) or 0
-    local WATCHDOG_MS = watchdogSec * 1000
+    -- `lastSeen` is published on HUE._lastSseSeen and consulted by the
+    -- active SSE heartbeat probe (see HUE:pingSSE / sseHeartbeat).
     local lastSeen = 0
-    local watchdogRef
     -- Epoch guard: HC3's net.HTTPClient has no abort. When we issue a new
-    -- request (watchdog reconnect, parse-failure reconnect, error reconnect)
-    -- the OLD client may still be alive and will keep firing success/error
-    -- callbacks. Without a guard, those stale callbacks would (a) re-publish
+    -- request (parse-failure reconnect, error reconnect) the OLD client
+    -- may still be alive and will keep firing success/error callbacks.
+    -- Without a guard, those stale callbacks would (a) re-publish
     -- duplicate Hue events through handle_events and (b) schedule their own
     -- getw() retries, causing an unbounded fan-out of parallel SSE consumers.
     -- Each call to getw() bumps `epoch`; each request's callbacks capture
     -- their own `myEpoch` and silently no-op when superseded.
     local epoch = 0
-    local function armWatchdog()
-      if WATCHDOG_MS <= 0 then return end
-      if watchdogRef then clearTimeout(watchdogRef) end
-      watchdogRef = setTimeout(function()
-        watchdogRef = nil
-        local quiet = (os.time() - lastSeen) * 1000
-        if quiet >= WATCHDOG_MS then
-          WARNING("/eventstream: no data for %ds, reconnecting", math.floor(quiet/1000))
-          -- Re-fetch the full resource tree after reconnect: the SSE gap
-          -- means we missed any events that happened while the socket was
-          -- silently dead. REFRESH_RESOURCES + the resync flag re-publishes
-          -- current state so child QAs catch up.
-          HUE._resyncOnRefresh = true
-          post({type='REFRESH_RESOURCES'})
-          getw()
-        else
-          armWatchdog()
-        end
-      end, WATCHDOG_MS)
-    end
     local function bumpBackoff()
       if backoff == 0 then backoff = 1000
       else backoff = math.min(backoff * 2, 300000) end  -- cap 5 min; matches REFRESH max
@@ -988,7 +972,7 @@ local function main()
       epoch = epoch + 1
       local myEpoch = epoch
       lastSeen = os.time()
-      armWatchdog()
+      HUE._lastSseSeen = lastSeen
       local args = {
         options = {
           method='GET',
@@ -1015,7 +999,11 @@ local function main()
           if res.status == 429 then
             local ra = parseRetryAfter(res)
             enterCooldown(ra, "SSE")
-            local d = math.max(bridgeWaitMs(), bumpBackoff())
+            -- Governor owns the back-off when we're throttled. Reset the
+            -- local backoff so we don't carry a stale 5-min wait forward
+            -- once the bridge recovers.
+            backoff = 0
+            local d = bridgeWaitMs()
             WARNING("/eventstream: HTTP 429 (retry in %dms)", d)
             setTimeout(getw, d)
           else
@@ -1027,6 +1015,7 @@ local function main()
         end
         backoff = 0
         lastSeen = os.time()
+        HUE._lastSseSeen = lastSeen
         local stat,err = pcall(function()
           local body = res and res.data
           if type(body) ~= 'string' or body == '' then return end
@@ -1052,7 +1041,8 @@ local function main()
         local errStr = tostring(err or "")
         if errStr:find("429", 1, true) then
           enterCooldown(nil, "SSE")
-          local d = math.max(bridgeWaitMs(), bumpBackoff())
+          backoff = 0  -- governor owns the wait; don't carry stale local backoff
+          local d = bridgeWaitMs()
           WARNING("/eventstream: HTTP 429 (retry in %dms)", d)
           setTimeout(getw, d)
           return
@@ -1442,18 +1432,26 @@ local function main()
       else
         status = ev.error
       end
-      local cool = retryAfter or refreshBackoff
-      if tonumber(status) == 429 then enterCooldown(retryAfter, "GET refresh") end
-      -- Honor the global cooldown: never re-post REFRESH before the
-      -- governor has cleared, otherwise the refresher would keep dogpiling
-      -- the bridge on its own 3->6->12->24s curve during a 30s+ cooldown.
-      local waitMs = math.max(1000 * cool, bridgeWaitMs())
-      local effectiveS = math.floor(waitMs / 1000)
+      local is429 = tonumber(status) == 429
+      if is429 then enterCooldown(retryAfter, "GET refresh") end
+      -- On 429 the governor owns the wait — don't escalate refreshBackoff
+      -- (otherwise it grows to its 300s cap and stays there forever, even
+      -- after the bridge recovers). On non-429 errors keep the local
+      -- escalating back-off.
+      local waitMs
+      if is429 then
+        waitMs = bridgeWaitMs()
+        refreshBackoff = err_retry  -- reset local; governor is authoritative
+      else
+        local cool = retryAfter or refreshBackoff
+        waitMs = math.max(1000 * cool, bridgeWaitMs())
+        refreshBackoff = math.min(refreshBackoff * 2, 300)
+      end
+      local effectiveS = math.max(1, math.floor(waitMs / 1000))
       WARNING("/clip/v2/resource HTTP error: %s", tostring(status))
       WARNING("Retry in %ss", effectiveS)
-      refreshBlockedUntil = os.time() + effectiveS  -- block all concurrent sources
+      refreshBlockedUntil = os.time() + effectiveS
       post({type='REFRESH_RESOURCES'}, waitMs)
-      refreshBackoff = math.min(refreshBackoff * 2, 300)  -- cap at 5 min; 60s was too aggressive when bridge is persistently 429-ing
       return
     end
     refreshBackoff = err_retry
@@ -1507,6 +1505,54 @@ local function main()
   function HUE:getResource(id) return resources.id2resource[id] end
   function HUE:getResourceType(typ) return resources.resources[typ] or {} end
   function HUE:_resolve(id) return resolve(id) end
+  -- SSE liveness probe. Picks a harmless resource (zone > room > light) and
+  -- PUTs its current metadata.name back unchanged; Hue v2 normally emits an
+  -- `update` event on SSE for any successful PUT. We listen for the echo
+  -- in handle_events and report round-trip time. `cb(ok, rtt_or_err)`.
+  function HUE:pingSSE(timeoutSec, cb)
+    timeoutSec = tonumber(timeoutSec) or 10
+    if _sseProbe then
+      if cb then pcall(cb, false, "probe already in flight") end
+      return false
+    end
+    -- Find a target. Prefer zone (no functional state), then room, then light.
+    local target
+    for _,typ in ipairs({"zone","room","light"}) do
+      local pool = resources.resources[typ]
+      if pool then
+        for _,r in pairs(pool) do
+          if r.rsrc and r.rsrc.metadata and r.rsrc.metadata.name then
+            target = r ; break
+          end
+        end
+      end
+      if target then break end
+    end
+    if not target then
+      if cb then pcall(cb, false, "no suitable resource for ping") end
+      return false
+    end
+    local origName = target.rsrc.metadata.name
+    -- Toggle a trailing marker char to force a real change (the bridge
+    -- optimizes away same-value PUTs and emits no SSE event). The marker
+    -- is stripped/appended alternately so the name always returns to its
+    -- original form on the next ping.
+    local MARK = "\u{00B7}"  -- middle dot; visible but unobtrusive
+    local newName
+    if origName:sub(-#MARK) == MARK then newName = origName:sub(1, -#MARK-1)
+    else newName = origName .. MARK end
+    _sseProbe = { id = target.id, t0 = os.time(), cb = cb }
+    _sseProbe.timer = setTimeout(function()
+      if _sseProbe then
+        local p = _sseProbe ; _sseProbe = nil
+        WARNING("SSE ping: NO echo within %ds (id=%s)", timeoutSec, p.id)
+        if p.cb then pcall(p.cb, false, "timeout") end
+      end
+    end, timeoutSec * 1000)
+    DEBUG('call',"SSE ping: PUT %s metadata.name=%q (was %q)", target.path, newName, origName)
+    huePUT(target.path, { metadata = { name = newName } })
+    return true
+  end
   function HUE:getSceneByName(name,roomzone)
     local scenes = self:getResourceType('scene')
     for id,scene in pairs(scenes) do
@@ -1670,6 +1716,41 @@ local function main()
         HUE._resyncOnRefresh = true
         post({type='REFRESH_RESOURCES'})
       end, 30*60*1000)
+      -- SSE heartbeat. Set QA variable `sseHeartbeat` to minutes between
+      -- active SSE liveness probes (0 = disabled). On a missed echo we
+      -- restart the QA, on the assumption that the SSE stream is dead
+      -- but TCP hasn't noticed. Skip the probe entirely while the bridge
+      -- is in governor cooldown — the PUT would just add 429-fuel.
+      local hbMin = tonumber(quickApp and quickApp:getVariable("sseHeartbeat")) or 0
+      if hbMin > 0 then
+        local hbMs = hbMin * 60 * 1000
+        local function schedule()
+          setTimeout(function()
+            -- Skip the ping if SSE has delivered something within the
+            -- heartbeat window — that's already proof the stream is alive.
+            local quiet = os.time() - (HUE._lastSseSeen or 0)
+            if quiet * 1000 < hbMs then
+              DEBUG('info',"SSE heartbeat: recent activity %ds ago, skipping", quiet)
+              schedule() ; return
+            end
+            if bridgeWaitMs() > 0 then
+              DEBUG('info',"SSE heartbeat: bridge in cooldown, skipping")
+              schedule() ; return
+            end
+            HUE:pingSSE(15, function(ok, info)
+              if not ok then
+                ERROR("SSE heartbeat FAILED (%s) - restarting QA", tostring(info))
+                setTimeout(function() plugin.restart() end, 1000)
+              else
+                DEBUG('info',"SSE heartbeat OK (rtt ~%ss)", tostring(info))
+                schedule()
+              end
+            end)
+          end, hbMs)
+        end
+        schedule()
+        DEBUG('info',"SSE heartbeat enabled, interval=%dmin", hbMin)
+      end
       if cb then cb() end
     end
     post({type='STARTUP'})
