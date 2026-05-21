@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.57] - 2026-05-21
+
+## Changes in v0.2.57
+
+- ✨ **Feature**: add SSE liveness probe and heartbeat functionality to enhance connection reliability
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.56] - 2026-05-20
 
 ## Changes in v0.2.56
