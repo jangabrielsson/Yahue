@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.58] - 2026-05-24
+
+## Changes in v0.2.58
+
+- ♻️ **Refactor**: simplify service access by replacing rawget with direct property access
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.57] - 2026-05-21
 
 ## Changes in v0.2.57
