@@ -285,7 +285,7 @@ function defClasses()
       duration_ms = v[2]
       colors      = v[3]
     end
-    local svc = rawget(self,'light') or rawget(self,'group')
+    local svc = self.light or self.group
     if svc and svc.signal then
       svc:signal(sig, duration_ms, colors)
     end
@@ -296,7 +296,7 @@ function defClasses()
   -- Example: child:setEffect("fire")  /  child:setEffect("stop")
   function HueClass:setEffect(effect)
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
-    local svc = rawget(self,'light')
+    local svc = self.light
     if svc and svc.setEffect then svc:setEffect(effect) end
     self:setVariable("colormode", effect == 'stop' and "" or "effect:" .. effect)
   end
@@ -309,7 +309,7 @@ function defClasses()
       local v = effect.values or effect
       effect, duration_ms = v[1], v[2]
     end
-    local svc = rawget(self,'light')
+    local svc = self.light
     if svc and svc.setTimedEffect then svc:setTimedEffect(effect, duration_ms) end
   end
   -- Effect UI button callbacks – one method per Hue looping effect.
@@ -338,7 +338,7 @@ function defClasses()
   -- cmd: a table matching the Hue v2 grouped_light / light PUT body.
   function HueClass:rawCmd(cmd)
     if type(cmd) == 'table' and cmd.values then cmd = cmd.values[1] end
-    local svc = rawget(self,'group') or rawget(self,'light')
+    local svc = self.group or self.light
     if svc and svc.rawCmd then svc:rawCmd(cmd) end
   end
   -- Fades from `from`% to `to`% over `duration` ms, turning the light on.
@@ -348,7 +348,7 @@ function defClasses()
     if type(from)=='table' and from.values then
       local v = from.values; from=tonumber(v[1]); to=tonumber(v[2]); duration=tonumber(v[3])
     end
-    local svc = rawget(self,'group') or rawget(self,'light')
+    local svc = self.group or self.light
     if svc and svc.fadeTo then svc:fadeTo(from,to,duration) end
   end
 
