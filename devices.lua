@@ -386,6 +386,10 @@ function defClasses()
     end
     table.sort(options, function(a, b) return a.text < b.text end)
     child:updateView("sceneSelect", "options", options)
+    -- Store scene id list for nextScene/prevScene cycling (skip "None" at index 1)
+    local sceneIds = {}
+    for i = 2, #options do sceneIds[#sceneIds+1] = options[i].value end
+    child._sceneList = sceneIds
     -- Restore the last selected scene id so the dropdown shows it.
     local last = child:getVariable("lastSceneId")
     if last and last ~= "" then
@@ -704,6 +708,13 @@ function defClasses()
         self:updateProperty("value",self.lastVal or 100)
       end
     end)
+    self:setVariable("capabilities", json.encode({
+      supportsOnOff = true,
+      supportsDimming = true,
+      supportsColor = false,
+      supportsColorTemperature = false,
+      supportsScenes = false,
+    }))
   end
   function DimmableLight:turnOn()
     self:updateProperty("state",true)
@@ -793,6 +804,13 @@ function defClasses()
       self:updateProperty("colorTemperature",value)
     end)
     self.dev:publishAll()
+    self:setVariable("capabilities", json.encode({
+      supportsOnOff = true,
+      supportsDimming = true,
+      supportsColor = false,
+      supportsColorTemperature = true,
+      supportsScenes = false,
+    }))
   end
   function TempLight:setColorTemperature(value)
     if type(value)=='table' and value.values then value = value.values[1] end
@@ -801,7 +819,6 @@ function defClasses()
     self.light:setTemperature(mirek)
     self:setVariable("colormode", "ct")
   end
-
   -- ─────────────────────────────────────────────────────────────────────────
   -- ColorLight  →  com.fibaro.colorController
   -- Hue service: light with on + dimming + color (xy) [+ optional color_temperature].
@@ -827,6 +844,13 @@ function defClasses()
       self:updateProperty("colorTemperature",value)
     end)
     self.dev:publishAll()
+    self:setVariable("capabilities", json.encode({
+      supportsOnOff = true,
+      supportsDimming = true,
+      supportsColor = true,
+      supportsColorTemperature = true,
+      supportsScenes = false,
+    }))
   end
   function ColorLight:setColor(r,g,b,w)
     local color = string.format("%d,%d,%d,%d", r or 0, g or 0, b or 0, w or 0) -- For logging purposes
@@ -1110,6 +1134,13 @@ function defClasses()
 
     self.dev:publishAll()
     loadScenesForRoom(self)
+    self:setVariable("capabilities", json.encode({
+      supportsOnOff = true,
+      supportsDimming = self.hasDim,
+      supportsColor = self.hasColor,
+      supportsColorTemperature = self.hasColor,
+      supportsScenes = true,
+    }))
     local mode = self:getVariable("sceneMode") == "dynamic" and T("ui.dynamic") or T("ui.static")
     self:updateView("sceneMode", "text", mode)
   end
@@ -1289,6 +1320,39 @@ function defClasses()
   end
   -- Sends a looping effect to the grouped_light service so rooms/zones are
   -- also supported. Overrides HueClass:setEffect which targets individual lights.
+  -- Internal helper: recalls a scene by id and updates UI state.
+  function RoomZoneQA:_recallSceneById(sceneId)
+    if not sceneId then return end
+    local sc = HUE:getResource(sceneId)
+    if sc then
+      local dynamic = (self:getVariable("sceneMode") == "dynamic")
+      self:print("Recall scene %s (%s)", sc.name, dynamic and "dynamic" or "static")
+      sc:recall(nil, dynamic)
+      self:setVariable("lastSceneId", sceneId)
+      self:setVariable("colormode", "scene:" .. sc.name)
+      self:updateView("sceneSelect", "selectedItem", sceneId)
+    end
+  end
+  -- Cycles to the next scene for this room/zone. fibaro.call(id, "nextScene")
+  function RoomZoneQA:nextScene()
+    local list = self._sceneList
+    if not list or #list == 0 then return end
+    local cur = self:getVariable("lastSceneId")
+    local idx = 0
+    for i, id in ipairs(list) do if id == cur then idx = i; break end end
+    idx = idx + 1; if idx > #list then idx = 1 end
+    self:_recallSceneById(list[idx])
+  end
+  -- Cycles to the previous scene. fibaro.call(id, "prevScene")
+  function RoomZoneQA:prevScene()
+    local list = self._sceneList
+    if not list or #list == 0 then return end
+    local cur = self:getVariable("lastSceneId")
+    local idx = 0
+    for i, id in ipairs(list) do if id == cur then idx = i; break end end
+    idx = idx - 1; if idx < 1 then idx = #list end
+    self:_recallSceneById(list[idx])
+  end
   function RoomZoneQA:setEffect(effect)
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
     local e = effect == 'stop' and 'no_effect' or effect
