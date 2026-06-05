@@ -873,7 +873,10 @@ function defClasses()
         if self.hasDim then
           local cur = tonumber(self.properties.value) or 0
           if cur <= 0 then
-            self:updateProperty("value", self.lastVal or 100)
+            local age = (os.time()*1000) - cmdTime
+            if age > CMD_INHIBIT_MS then
+              self:updateProperty("value", self.lastVal or 100)
+            end
           end
         else
           self:updateProperty("value", true)
