@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.63] - 2026-06-05
+
+## Changes in v0.2.63
+
+- ✨ **Feature**: enhance DimmableLight:turnOn to support scene activation
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.62] - 2026-06-05
 
 ## Changes in v0.2.62
