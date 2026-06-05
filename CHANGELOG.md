@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.60] - 2026-06-05
+
+## Changes in v0.2.60
+
+- 🐛 **Fix**: update hueResource to use context huePUT for command sending
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.59] - 2026-06-05
 
 ## Changes in v0.2.59
