@@ -11,7 +11,6 @@ function fibaro.hueResources.define(ctx)
   local fmt = ctx.fmt
   local merge = ctx.merge
   local PGET, PSET = ctx.PGET, ctx.PSET
-  local hueGET, huePUT = ctx.hueGET, ctx.huePUT
   local DEBUG, WARNING = ctx.DEBUG, ctx.WARNING
   local copyShallow = ctx.copyShallow
   local HUE = ctx.HUE
@@ -160,7 +159,7 @@ function fibaro.hueResources.define(ctx)
       end
     end
   end
-  function hueResource:sendCmd(cmd,slot) return huePUT(self.path,cmd,nil,slot) end
+  function hueResource:sendCmd(cmd,slot) return ctx.huePUT(self.path,cmd,nil,slot) end
   function hueResource:__tostring() return self._str or fmt("[rsrc:%s]",self.id) end
   function hueResource:annotateEvent(r)
     return setmetatable(r,{
