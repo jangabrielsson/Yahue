@@ -11,6 +11,10 @@
 --%%file:devices.lua,App
 --%%file:utils.lua,Utils
 --%%file:lang.lua,lang
+--%%file:hue-resources.lua,HueResources
+--%%file:hue-transport.lua,HueTransport
+--%%file:hue-startup.lua,HueStartup
+--%%file:hue-app.lua,HueApp
 --%%u:{label='info', text=''}
 --%%u:{label='huedevs', text='Hue devices found:'}
 --%%u:{multi='devSelect', text='Devices', values={}, options={}, onToggled='devSelChanged'}
@@ -19,7 +23,7 @@
 
 -- %%desktop:true
 -- %%offline:true
--- %%proxy:true
+--%%proxy:true
 
 -- Hue resource kind → Fibaro QA type mapping
 -- ┌─────────────────────┬──────────────────────────────────┬────────────────────────────────────────────┐
@@ -39,6 +43,8 @@
 -- └─────────────────────┴──────────────────────────────────┴────────────────────────────────────────────┘
 
 fibaro.debugFlags = fibaro.debugFlags or {}
+local debug = fibaro.debugFlags
+debug.class = true
 local HUE
 
 local function isEngineReady(engine)
