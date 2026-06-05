@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.62] - 2026-06-05
+
+## Changes in v0.2.62
+
+- 🐛 **Fix**: update defClasses function to use dimdelay as fallback for transition duration
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.61] - 2026-06-05
 
 ## Changes in v0.2.61
