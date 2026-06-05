@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.2.59] - 2026-06-05
+
+## Changes in v0.2.59
+
+- ✨ **Feature**: Add Hue v2 engine startup and transport layer
+  - Implemented hue-startup.lua for managing the Hue v2 engine startup process, including state machine, health checks, and public API.
+  - Introduced hue-transport.lua to handle SSE event polling, HTTP GET/PUT requests, and rate-limit management.
+  - Established a bucketed command queueing system for efficient PUT requests to the Hue bridge.
+  - Added error handling and retry mechanisms for HTTP requests, including cooldown management for rate limits.
+- ✨ **Feature**: add project structure documentation and forum post for release v0.2.58
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.58] - 2026-05-24
 
 ## Changes in v0.2.58
