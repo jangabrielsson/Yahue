@@ -602,7 +602,8 @@ function defClasses()
     end
     self:updateProperty("value", value)
     self:updateProperty("state", true)
-    self.light:sendCmd({on={on=true},dimming={brightness=value},dynamics=self.transition and self.transition>0 and {duration=self.transition} or nil})
+    local t = self.transition > 0 and self.transition or self.dimdelay
+    self.light:sendCmd({on={on=true},dimming={brightness=value},dynamics=t > 0 and {duration=t} or nil})
   end
   -- Sets brightness without turning the light on. Useful for pre-positioning
   -- before a fade-up: fibaro.call(id,"setDim",1) then later setValue(50).
@@ -611,7 +612,7 @@ function defClasses()
     value = tonumber(value)
     if not value then return end
     self:updateProperty("value",value)
-    self.light:setDim(value, self.transition)
+    self.light:setDim(value, self.transition > 0 and self.transition or self.dimdelay)
   end
   -- Fades from `from`% (no turn-on) to `to`% (turn-on) over `duration` ms.
   -- fibaro.call(id, "fadeTo", 1, 50, 3000)
@@ -1087,7 +1088,8 @@ function defClasses()
     self:updateProperty("value", value)
     self:updateProperty("state", true)
     self:_stampCmd()
-    self.group:sendCmd({on={on=true},dimming={brightness=value},dynamics=self.transition and self.transition>0 and {duration=self.transition} or nil})
+    local t = self.transition > 0 and self.transition or self.dimdelay
+    self.group:sendCmd({on={on=true},dimming={brightness=value},dynamics=t > 0 and {duration=t} or nil})
   end
   -- Sets group brightness without turning it on. Useful for pre-positioning
   -- before a fade-up: fibaro.call(id,"setDim",1) then later setValue(50).
@@ -1098,7 +1100,7 @@ function defClasses()
     if not value or value < 0 then return end
     self:updateProperty("value", value)
     self:_stampCmd()
-    self.group:setDim(value, self.transition)
+    self.group:setDim(value, self.transition > 0 and self.transition or self.dimdelay)
   end
   -- Fades from `from`% (no turn-on) to `to`% (turn-on) over `duration` ms.
   -- fibaro.call(id, "fadeTo", 1, 50, 3000)
