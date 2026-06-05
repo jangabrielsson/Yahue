@@ -579,7 +579,17 @@ function defClasses()
       supportsScenes = false,
     }))
   end
-  function DimmableLight:turnOn()
+  function DimmableLight:turnOn(sceneArg)
+    if type(sceneArg) == 'string' and sceneArg ~= '' then
+      local sc = HUE:getSceneByName(sceneArg)
+      if sc then
+        self:print("Turn on scene %s", sc.name)
+        sc:recall(nil, false)
+        self:updateProperty("state", true)
+        self:setVariable("colormode", "scene:" .. sc.name)
+        return
+      end
+    end
     self:updateProperty("state",true)
     self:updateProperty("value",self.lastVal or 100)
     self.light:turnOn(self.transition)
