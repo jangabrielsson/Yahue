@@ -114,6 +114,7 @@ function defClasses()
     if sc then
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
       self:print("Recall scene %s (%s)", sc.name, dynamic and "dynamic" or "static")
+      self:_stampCmd()
       sc:recall(nil, dynamic)
       -- Persist as the last selected scene so the dropdown can be restored on next startup.
       self:setVariable("lastSceneId", sceneId)
@@ -1060,6 +1061,7 @@ function defClasses()
     else
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
       self:print("Turn on Scene %s (%s)", scene.name, dynamic and "dynamic" or "static")
+      self:_stampCmd()
       scene:recall(nil, dynamic)
       self:setVariable("colormode", "scene:" .. scene.name)
     end
@@ -1208,6 +1210,7 @@ function defClasses()
     if sc then
       local dynamic = (self:getVariable("sceneMode") == "dynamic")
       self:print("Recall scene %s (%s)", sc.name, dynamic and "dynamic" or "static")
+      self:_stampCmd()
       sc:recall(nil, dynamic)
       self:setVariable("lastSceneId", sceneId)
       self:setVariable("colormode", "scene:" .. sc.name)
