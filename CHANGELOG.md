@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.61] - 2026-06-05
+
+## Changes in v0.2.61
+
+- 🐛 **Fix**: add age check before updating property value in defClasses function
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.60] - 2026-06-05
 
 ## Changes in v0.2.60
