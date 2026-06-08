@@ -877,6 +877,10 @@ function defClasses()
         for _,v in pairs(devsons) do if v then anyOn = true; break end end
       end
 
+      -- Snapshot state BEFORE aggregate updates it — needed to distinguish
+      -- "room was deliberately turned off" from "transient gap between
+      -- members going off one-by-one during a turn-off".
+      local prevState = self.properties.state
       self:updateProperty("state", anyOn)
       -- HC3 quirk: value=0 on colorController forces state=false, so we must
       -- never write value=0 while anyOn is true. Restore from lastVal when
@@ -884,11 +888,8 @@ function defClasses()
       if anyOn then
         if self.hasDim then
           local cur = tonumber(self.properties.value) or 0
-          if cur <= 0 then
-            local age = (os.time()*1000) - cmdTime
-            if age > CMD_INHIBIT_MS then
-              self:updateProperty("value", self.lastVal or 100)
-            end
+          if cur <= 0 and prevState then
+            self:updateProperty("value", self.lastVal or 100)
           end
         else
           self:updateProperty("value", true)
@@ -983,10 +984,7 @@ function defClasses()
                 local avg = math.max(1, ROUND(sum / n))
                 self.lastVal = avg
                 if self.properties.state then
-                  local age = (os.time()*1000) - cmdTime
-                  if age > CMD_INHIBIT_MS then
-                    self:updateProperty("value", avg)
-                  end
+                  self:updateProperty("value", avg)
                 end
               end
             end
