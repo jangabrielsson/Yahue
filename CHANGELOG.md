@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.65] - 2026-06-08
+
+## Changes in v0.2.65
+
+- ✨ **Feature**: add snapshot state handling in defClasses for improved state management
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.64] - 2026-06-05
 
 ## Changes in v0.2.64
