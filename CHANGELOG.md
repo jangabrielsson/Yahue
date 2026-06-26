@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.67] - 2026-06-26
+
+## Changes in v0.2.67
+
+- ✨ **Feature**: add stub level-change handlers to suppress runtime warnings in deviceController
+- ✨ **Feature**: add Hue Bridge rate-limit probe script and update .gitignore
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.66] - 2026-06-26
 
 ## Changes in v0.2.66
