@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.66] - 2026-06-26
+
+## Changes in v0.2.66
+
+- ✨ **Feature**: enhance debug handling by passing debugFlags to hueTransport context
+- ✨ **Feature**: chore: add test directory to .gitignore
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.65] - 2026-06-08
 
 ## Changes in v0.2.65
