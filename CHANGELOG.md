@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.68] - 2026-06-26
+
+## Changes in v0.2.68
+
+- ✨ **Feature**: add no-op handlers for dimmer actions to suppress runtime warnings in deviceController
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.67] - 2026-06-26
 
 ## Changes in v0.2.67
