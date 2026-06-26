@@ -6,16 +6,19 @@ fibaro.hueTransport = fibaro.hueTransport or {}
 
 function fibaro.hueTransport.define(ctx)
   local DEBUG, WARNING, ERROR = ctx.DEBUG, ctx.WARNING, ctx.ERROR
+  local debugFlags = ctx.debugFlags
   local fmt = ctx.fmt
   local post = ctx.post
   local HUE = ctx.HUE
 
-  -- Constants
-  local COOLDOWN_BASE = 5
-  local COOLDOWN_MAX = 60
-  local HEALTH_RESET_S = 120
-  local ESCALATE_WINDOW_S = 60
-  local ESCALATE_THRESHOLD = 3
+  -- Constants — tuned against real bridge behaviour (see test/testhue.lua probe).
+  -- Most Hue bridges recover from 429 in ≤ 1 s and sustain 100+ GET/s.
+  -- PUT throughput is typically lower but 50/s per bucket is safe.
+  local COOLDOWN_BASE = 2            -- baseline; probe shows ≤ 1 s recovery
+  local COOLDOWN_MAX = 60            -- cap on escalation
+  local HEALTH_RESET_S = 120         -- 2 min of health resets escalation
+  local ESCALATE_WINDOW_S = 60       -- look-back window for clustered 429s
+  local ESCALATE_THRESHOLD = 3       -- ≥ N 429s in window to escalate
 
   -- Mutable governor state (aliased from ctx; written back at end)
   local bridgeHealthy = ctx.bridgeHealthy
@@ -52,7 +55,7 @@ function fibaro.hueTransport.define(ctx)
             d:event(r)
           else
             local _ = 0
-            if debug.unknownType then WARNING("Unknow resource type: %s",json.encode(e1)) end
+            if debugFlags and debugFlags.unknownType then WARNING("Unknow resource type: %s",json.encode(e1)) end
           end
         end
       elseif e1.type == 'delete' then
@@ -170,9 +173,9 @@ function fibaro.hueTransport.define(ctx)
           end
           return
         end
-        backoff = 0
         lastSeen = os.time()
         HUE._lastSseSeen = lastSeen
+        local parsed = false
         local stat,err = pcall(function()
           local body = res and res.data
           if type(body) ~= 'string' or body == '' then return end
@@ -180,13 +183,18 @@ function fibaro.hueTransport.define(ctx)
           local arr = body:match("(%b[])")
           if not arr then return end
           local data = json.decode(arr)
-          if data then handle_events(data) end
+          if data then
+            handle_events(data)
+            parsed = true
+          end
         end)
         if not stat then
           if myEpoch ~= epoch then return end
           local d = bumpBackoff()
           WARNING("/eventstream parse: %s (retry in %dms)", tostring(err), d)
           setTimeout(getw, d)
+        elseif parsed then
+          backoff = 0
         end
       end
       function args.error(err)
@@ -312,11 +320,13 @@ function fibaro.hueTransport.define(ctx)
   local QUEUE_TTL_S = 5
   local MAX_RETRIES = 2
   local RETRY_DELAY_MS = 500
+  -- Bucket refill rates (ms between sends).  Tuned against probe data:
+  -- the bridge can sustain 50+ PUT/s per resource family safely.
   local BUCKETS = {
-    light   = { name="light",   refillMs=100,  queue={}, inFlight=false },
-    grouped = { name="grouped", refillMs=100,  queue={}, inFlight=false },
-    scene   = { name="scene",   refillMs=150,  queue={}, inFlight=false },
-    other   = { name="other",   refillMs=250,  queue={}, inFlight=false },
+    light   = { name="light",   refillMs=20,   queue={}, inFlight=false },
+    grouped = { name="grouped", refillMs=20,   queue={}, inFlight=false },
+    scene   = { name="scene",   refillMs=50,   queue={}, inFlight=false },
+    other   = { name="other",   refillMs=100,  queue={}, inFlight=false },
   }
 
   local function bucketFor(path)
@@ -353,7 +363,12 @@ function fibaro.hueTransport.define(ctx)
           if retryCount >= MAX_RETRIES then
             WARNING("hue PUT 429 give-up after %d retries: %s", MAX_RETRIES, item.path)
             enterCooldown(parseRetryAfter(resp), "PUT")
-            clearAllQueues("PUT cooldown")
+            -- Only flush this bucket — other buckets may still be valid
+            -- after the cooldown window (TTL will drop stale items).
+            if #b.queue > 0 then
+              DEBUG('call', "Hue queue purge (429): %d items from %s", #b.queue, b.name)
+              b.queue = {}
+            end
             b.inFlight = false
             return
           end
@@ -378,7 +393,10 @@ function fibaro.hueTransport.define(ctx)
   tickBucket = function(b)
     if b.inFlight then return end
     if not bridgeReady() then
-      b.queue = {}
+      if #b.queue > 0 then
+        DEBUG('call', "Hue queue dropped (bridge cooldown): %d items from %s", #b.queue, b.name)
+        b.queue = {}
+      end
       return
     end
     while b.queue[1] and (os.time() - b.queue[1].enqueuedAt) > QUEUE_TTL_S do

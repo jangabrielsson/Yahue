@@ -204,6 +204,7 @@ local function main()
     DEBUG = DEBUG,
     WARNING = WARNING,
     ERROR = ERROR,
+    debugFlags = debug,
     fmt = string.format,
     PGET = PGET,
     PSET = PSET,
