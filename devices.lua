@@ -89,6 +89,13 @@ function defClasses()
   -- Override in subclasses to send raw Hue API commands.
   function HueClass:hueCommand(tab)
   end
+  -- Stub level-change handlers to suppress Fibaro runtime warnings
+  -- ("Class does not have 15 function defined") when a block scene
+  -- sends dimmer actions to a non-dimmable child (e.g. BinarySwitch).
+  -- DimmableLight and RoomZoneQA override these with real implementations.
+  function HueClass:startLevelIncrease() end
+  function HueClass:startLevelDecrease() end
+  function HueClass:stopLevelChange() end
   -- Returns the value of a QuickApp variable by name, or "" if not found.
   -- Does NOT log a warning for missing variables (unlike the built-in getVariable).
   function HueClass:getVariable(name)

@@ -114,6 +114,13 @@ function QuickApp:onInit()
 end
 
 function QuickApp:restart() plugin.restart() end
+-- Stub level-change handlers for the parent deviceController QA.
+-- The Fibaro type definition for deviceController includes dimmer actions
+-- (15=startLevelIncrease, 16=startLevelDecrease, 17=stopLevelChange).
+-- They are no-ops here — dimming is handled by child devices.
+function QuickApp:startLevelIncrease() end
+function QuickApp:startLevelDecrease() end
+function QuickApp:stopLevelChange() end
 function QuickApp:pingSSE()
   if not isEngineReady(HUE) then self:error("HUE not ready") return end
   HUE:pingSSE(10, function(ok, info)

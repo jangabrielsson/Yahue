@@ -8,6 +8,18 @@ function fibaro.hueStartup.define(ctx)
   local DEBUG, WARNING, ERROR = ctx.DEBUG, ctx.WARNING, ctx.ERROR
   local fmt = ctx.fmt
   local post = ctx.post
+
+  -- Silent variable reader — does NOT log a warning when the variable
+  -- is missing (unlike quickApp:getVariable).
+  local function getVar(name, default)
+    local qvars = quickApp and quickApp.properties and quickApp.properties.quickAppVariables
+    if qvars then
+      for _, v in ipairs(qvars) do
+        if v.name == name then return v.value end
+      end
+    end
+    return default
+  end
   local resources = ctx.resources
   local hueGET = ctx.hueGET
   local huePUT = ctx.huePUT
@@ -321,7 +333,7 @@ function fibaro.hueStartup.define(ctx)
         HUE._resyncOnRefresh = true
         post({type='REFRESH_RESOURCES'})
       end, 30*60*1000)
-      local hbMin = tonumber(quickApp and quickApp:getVariable("sseHeartbeat")) or 0
+      local hbMin = tonumber(getVar("sseHeartbeat", 0)) or 0
       if hbMin > 0 then
         local hbMs = hbMin * 60 * 1000
         local function schedule()
