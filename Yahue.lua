@@ -114,10 +114,10 @@ function QuickApp:onInit()
 end
 
 function QuickApp:restart() plugin.restart() end
--- Stub level-change handlers for the parent deviceController QA.
--- The Fibaro type definition for deviceController includes dimmer actions
--- (15=startLevelIncrease, 16=startLevelDecrease, 17=stopLevelChange).
--- They are no-ops here — dimming is handled by child devices.
+
+-- No-op handlers for dimmer actions that the Fibaro type definition
+-- for deviceController expects.  Suppresses the runtime warning
+-- "Class does not have 15 function defined".
 function QuickApp:startLevelIncrease() end
 function QuickApp:startLevelDecrease() end
 function QuickApp:stopLevelChange() end

@@ -49,6 +49,7 @@ function defClasses()
   -- self._uid, sets up dead/battery subscriptions, and fills userDescription.
   -- ─────────────────────────────────────────────────────────────────────────
   class 'HueClass'(QwikAppChild)
+
   -- Initialises the Hue resource binding and common subscriptions.
   function HueClass:__init(dev)
     QwikAppChild.__init(self,dev)
