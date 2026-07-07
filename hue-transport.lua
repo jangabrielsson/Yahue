@@ -437,6 +437,110 @@ function fibaro.hueTransport.define(ctx)
     return true
   end
 
+  ---------------------------------------------------------------------------
+  -- SSE LIVENESS PROBE
+  ---------------------------------------------------------------------------
+  -- PING_MARKER: middle dot, appended/removed from metadata.name for non-scene
+  -- targets. Scene targets use metadata.appdata instead (invisible to users).
+  local PING_MARKER = "\u{00B7}"
+
+  --- findPingTarget(cb)
+  -- Tries: scene in any room → light in any room → any room → any zone.
+  -- Calls cb({ id, path, type, baseName, baseAppdata }) on success, cb(nil) on failure.
+  function findPingTarget(cb)
+    local app_key = ctx.app_key
+    local base = ctx.url
+    local function httpGet(path, next_)
+      local args = { options = { method='GET', checkCertificate=false,
+        headers={ ['hue-application-key'] = app_key } } }
+      function args.success(res)
+        if res.status and res.status < 300 and res.data then
+          local ok, data = pcall(json.decode, res.data)
+          if ok and data and data.data then next_(data.data) else next_(nil) end
+        else next_(nil) end
+      end
+      function args.error(_) next_(nil) end
+      net.HTTPClient():request(base .. path, args)
+    end
+
+    -- Strategy 1: scene (preferred — appdata toggle, invisible)
+    httpGet("/clip/v2/resource/scene", function(scenes)
+      if scenes then
+        for _, s in ipairs(scenes) do
+          if s.group and s.group.rid then
+            cb({ id = s.id, path = "/clip/v2/resource/scene/" .. s.id,
+                 type = "scene",
+                 baseName = s.metadata and s.metadata.name or "",
+                 baseAppdata = s.metadata and s.metadata.appdata or "" })
+            return
+          end
+        end
+      end
+      -- Strategy 2: light
+      httpGet("/clip/v2/resource/light", function(lights)
+        if lights and #lights > 0 then
+          local l = lights[1]
+          cb({ id = l.id, path = "/clip/v2/resource/light/" .. l.id,
+               type = "light",
+               baseName = l.metadata and l.metadata.name or "" })
+          return
+        end
+        -- Strategy 3: room
+        httpGet("/clip/v2/resource/room", function(rooms)
+          if rooms and #rooms > 0 then
+            local r = rooms[1]
+            cb({ id = r.id, path = "/clip/v2/resource/room/" .. r.id,
+                 type = "room",
+                 baseName = r.metadata and r.metadata.name or "" })
+            return
+          end
+          -- Strategy 4: zone
+          httpGet("/clip/v2/resource/zone", function(zones)
+            if zones and #zones > 0 then
+              local z = zones[1]
+              cb({ id = z.id, path = "/clip/v2/resource/zone/" .. z.id,
+                   type = "zone",
+                   baseName = z.metadata and z.metadata.name or "" })
+              return
+            end
+            cb(nil)
+          end)
+        end)
+      end)
+    end)
+  end
+
+  --- doSSEPing(target, timeoutSec, cb)
+  -- Toggles target metadata to trigger an SSE echo. Scene: appdata. Others: name.
+  -- cb(ok, info) — ok=true on echo, ok=false on timeout.
+  function doSSEPing(target, timeoutSec, cb)
+    if not target then
+      if cb then pcall(cb, false, "no target") end
+      return
+    end
+    if ctx._sseProbe then
+      if cb then pcall(cb, false, "probe already in flight") end
+      return
+    end
+    timeoutSec = tonumber(timeoutSec) or 10
+    ctx._sseProbe = { id = target.id, t0 = os.time(), cb = cb }
+    ctx._sseProbe.timer = setTimeout(function()
+      if ctx._sseProbe then
+        local p = ctx._sseProbe ; ctx._sseProbe = nil
+        WARNING("SSE ping: no echo within %ds (id=%s)", timeoutSec, p.id)
+        if p.cb then pcall(p.cb, false, "timeout") end
+      end
+    end, timeoutSec * 1000)
+    local payload
+    if target.type == "scene" then
+      payload = { metadata = { appdata = "1" } }
+    else
+      payload = { metadata = { name = target.baseName .. PING_MARKER } }
+    end
+    DEBUG('call', "SSE ping: PUT %s (type=%s)", target.path, target.type)
+    huePUT(target.path, payload)
+  end
+
   -- Write back to context
   ctx.hueGET = hueGET
   ctx.huePUT = huePUT
@@ -452,4 +556,6 @@ function fibaro.hueTransport.define(ctx)
   ctx.bridgeLastHealthy = bridgeLastHealthy
   ctx.cooldownDefault = cooldownDefault
   ctx.recent429 = recent429
+  ctx.findPingTarget = findPingTarget
+  ctx.doSSEPing = doSSEPing
 end

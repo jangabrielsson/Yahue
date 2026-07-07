@@ -35,6 +35,8 @@ function fibaro.hueStartup.define(ctx)
   local HUE = ctx.HUE
   local fetchEvents = ctx.fetchEvents
   local createResourceTable = ctx.createResourceTable
+  local findPingTarget = ctx.findPingTarget
+  local doSSEPing = ctx.doSSEPing
   local _version_e = ctx._version_e
 
   -- State machine locals
@@ -116,7 +118,12 @@ function fibaro.hueStartup.define(ctx)
       HUE._resyncOnRefresh = nil
       DEBUG('v2api',"Re-publishing resource state after reconnect")
       for _,r in pairs(resources.id2resource) do
-        pcall(function() r:publishAll() end)
+        local typ = r.rsrc and r.rsrc.type
+        -- Skip input-only types: re-publishing their last event
+        -- would trigger false button presses / rotary events on restart.
+        if typ ~= "button" and typ ~= "relative_rotary" and typ ~= "motion" then
+          pcall(function() r:publishAll() end)
+        end
       end
     end
     local cb
@@ -333,34 +340,68 @@ function fibaro.hueStartup.define(ctx)
         HUE._resyncOnRefresh = true
         post({type='REFRESH_RESOURCES'})
       end, 30*60*1000)
-      local hbMin = tonumber(getVar("sseHeartbeat", 0)) or 0
-      if hbMin > 0 then
-        local hbMs = hbMin * 60 * 1000
-        local function schedule()
+
+      -- SSE watchdog: monitors SSE liveness and restarts QA if stream is dead.
+      -- Controlled by quickAppVariables "watchdog" and "watchtime".
+      --   watchdog = "time"  → reconnect SSE after quiet period
+      --   watchdog = "poll"  → ping bridge resource, restart if no echo
+      local function startSSEWatchdog()
+        local wdMode = getVar("watchdog", "time")
+        local wdTime = tonumber(getVar("watchtime", ""))
+        if not wdTime or wdTime <= 0 then
+          wdTime = (wdMode == "poll") and 60 or 1800
+        end
+        local wdMs = wdTime * 1000
+        DEBUG('info',"SSE watchdog: mode=%s interval=%ds", wdMode, wdTime)
+
+        local g_pingTarget = nil
+
+        local function doPollPing()
+          doSSEPing(g_pingTarget, 10, function(ok, info)
+            if not ok then
+              ERROR("SSE watchdog: ping FAILED (%s). SSE stream appears dead. Restarting QA.", tostring(info))
+              setTimeout(function() plugin.restart() end, 1000)
+            else
+              DEBUG('info',"SSE watchdog: ping OK (rtt ~%ss)", tostring(info))
+              tick()
+            end
+          end)
+        end
+
+        local function tick()
           setTimeout(function()
             local quiet = os.time() - (HUE._lastSseSeen or 0)
-            if quiet * 1000 < hbMs then
-              DEBUG('info',"SSE heartbeat: recent activity %ds ago, skipping", quiet)
-              schedule() ; return
+            if quiet < wdTime then
+              tick() ; return
             end
             if bridgeWaitMs() > 0 then
-              DEBUG('info',"SSE heartbeat: bridge in cooldown, skipping")
-              schedule() ; return
+              tick() ; return
             end
-            HUE:pingSSE(15, function(ok, info)
-              if not ok then
-                ERROR("SSE heartbeat FAILED (%s) - restarting QA", tostring(info))
-                setTimeout(function() plugin.restart() end, 1000)
+            if wdMode == "poll" then
+              if not g_pingTarget then
+                findPingTarget(function(t)
+                  if not t then
+                    ERROR("SSE watchdog: poll mode needs a ping target, none found. Falling back to time mode.")
+                    wdMode = "time"
+                    tick() ; return
+                  end
+                  g_pingTarget = t
+                  doPollPing()
+                end)
               else
-                DEBUG('info',"SSE heartbeat OK (rtt ~%ss)", tostring(info))
-                schedule()
+                doPollPing()
               end
-            end)
-          end, hbMs)
+            else
+              -- "time" mode: SSE has been quiet — stream is dead, restart QA
+              ERROR("SSE watchdog: no event for %ds, SSE stream appears dead. Restarting QA.", wdTime)
+              setTimeout(function() plugin.restart() end, 1000)
+            end
+          end, wdMs)
         end
-        schedule()
-        DEBUG('info',"SSE heartbeat enabled, interval=%dmin", hbMin)
+        tick()
       end
+
+      startSSEWatchdog()
       if cb then cb() end
     end
     post({type='STARTUP'})
