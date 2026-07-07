@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.2.69] - 2026-07-07
+
+## Changes in v0.2.69
+
+- ✨ **Feature**: add test directory to .gitignore
+- ✨ **Feature**: Add release notes for v0.2.68, implement SSE liveness probe, and enhance hue startup logic
+  - Created HTML release notes for Yahue v0.2.68 with download links and change log.
+  - Enhanced hue-startup.lua to include no-op handlers for dimmer actions and improved SSE watchdog functionality.
+  - Implemented findPingTarget and doSSEPing functions in hue-transport.lua for monitoring SSE liveness.
+  - Added test script testhue-sse-ping.lua to validate SSE liveness probe using scene toggling.
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.68] - 2026-06-26
 
 ## Changes in v0.2.68
