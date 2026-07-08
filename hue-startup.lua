@@ -355,6 +355,7 @@ function fibaro.hueStartup.define(ctx)
         DEBUG('info',"SSE watchdog: mode=%s interval=%ds", wdMode, wdTime)
 
         local g_pingTarget = nil
+        local tick
 
         local function doPollPing()
           doSSEPing(g_pingTarget, 10, function(ok, info)
@@ -368,7 +369,7 @@ function fibaro.hueStartup.define(ctx)
           end)
         end
 
-        local function tick()
+        function tick()
           setTimeout(function()
             local quiet = os.time() - (HUE._lastSseSeen or 0)
             if quiet < wdTime then
