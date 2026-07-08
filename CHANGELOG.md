@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.70] - 2026-07-08
+
+## Changes in v0.2.70
+
+- ✨ **Feature**: create HTML release notes for v0.2.69 and enhance hue startup logic with no-op handlers
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.69] - 2026-07-07
 
 ## Changes in v0.2.69
