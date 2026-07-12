@@ -241,12 +241,15 @@ function fibaro.hueResources.define(ctx)
   function light:setTemperature(t,transition) self:sendCmd({color_temperature={mirek=math.floor(t+0.5)},dynamics=transition and {duration=transition} or nil}) end
   function light:setEffect(effect)
     local e = effect == 'stop' and 'no_effect' or effect
-    self:sendCmd({effects={effect=e}})
+    local cmd = {effects={effect=e}}
+    if e ~= 'no_effect' then cmd.on = {on=true} end
+    self:sendCmd(cmd)
   end
   function light:setTimedEffect(effect, duration_ms)
     local e = effect == 'stop' and 'no_effect' or effect
     local cmd = {timed_effects={effect=e}}
     if e ~= 'no_effect' and duration_ms then cmd.timed_effects.duration = duration_ms end
+    if e ~= 'no_effect' then cmd.on = {on=true} end
     self:sendCmd(cmd)
   end
   function light:signal(sig, duration_ms, colors)
@@ -509,6 +512,48 @@ function fibaro.hueResources.define(ctx)
     self:sendCmd(cmd)
   end
   
+  --- iterateMemberLights(self, fn)
+  -- Calls fn(svc) for each individual light service in this group.
+  -- fn receives the resolved light service object.
+  local function iterateMemberLights(self, fn)
+    local owner = self.owner and resolve(self.owner) or nil
+    if not owner or not owner.children then return end
+    for _,c in ipairs(owner.children) do
+      local dev = resolve(c)
+      if dev and dev.services then
+        for _,s in ipairs(dev.services) do
+          local svc = resolve(s)
+          if svc and svc.type == 'light' and svc.id ~= self.id then
+            fn(svc)
+          end
+        end
+      end
+    end
+  end
+
+  --- grouped_light:setEffect(effect)
+  -- Hue bridge does not support effects on grouped_light resources.
+  -- Fan out to each individual light in the group instead.
+  function grouped_light:setEffect(effect)
+    local e = effect == 'stop' and 'no_effect' or effect
+    local cmd = {effects={effect=e}}
+    if e ~= 'no_effect' then cmd.on = {on=true} end
+    iterateMemberLights(self, function(svc)
+      svc:sendCmd(cmd)
+    end)
+  end
+
+  --- grouped_light:setTimedEffect(effect, duration_ms)
+  function grouped_light:setTimedEffect(effect, duration_ms)
+    local e = effect == 'stop' and 'no_effect' or effect
+    local cmd = {timed_effects={effect=e}}
+    if e ~= 'no_effect' and duration_ms then cmd.timed_effects.duration = duration_ms end
+    if e ~= 'no_effect' then cmd.on = {on=true} end
+    iterateMemberLights(self, function(svc)
+      svc:sendCmd(cmd)
+    end)
+  end
+
   meths.scene = { recall=true, targetCmd=true }
   local scene = defClass('scene',hueResource)
   function scene:__init(id)
