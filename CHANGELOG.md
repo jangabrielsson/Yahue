@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.71] - 2026-07-12
+
+## Changes in v0.2.71
+
+- ✨ **Feature**: add HTML release notes for v0.2.70 and enhance light effect handling in hue-resources
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.70] - 2026-07-08
 
 ## Changes in v0.2.70
