@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.74] - 2026-07-13
+
+## Changes in v0.2.74
+
+- ✨ **Feature**: update setEffect to use group light services and add release notes for v0.2.73
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.73] - 2026-07-13
 
 ## Changes in v0.2.73
