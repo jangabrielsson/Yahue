@@ -516,19 +516,23 @@ function fibaro.hueResources.define(ctx)
   -- Calls fn(svc) for each individual light service in this group.
   -- fn receives the resolved light service object.
   local function iterateMemberLights(self, fn)
+    local count = 0
     local owner = self.owner and resolve(self.owner) or nil
-    if not owner or not owner.children then return end
+    if not owner then WARNING("setEffect: no owner for grouped_light %s", self.id) ; return end
+    if not owner.children then WARNING("setEffect: owner %s has no children", owner.id) ; return end
     for _,c in ipairs(owner.children) do
       local dev = resolve(c)
       if dev and dev.services then
         for _,s in ipairs(dev.services) do
           local svc = resolve(s)
           if svc and svc.type == 'light' and svc.id ~= self.id then
+            count = count + 1
             fn(svc)
           end
         end
       end
     end
+    DEBUG('call', "setEffect: fanned out to %d member lights in group %s", count, self.id)
   end
 
   --- grouped_light:setEffect(effect)
