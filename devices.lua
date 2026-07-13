@@ -168,7 +168,7 @@ function defClasses()
   -- Example: child:setEffect("fire")  /  child:setEffect("stop")
   function HueClass:setEffect(effect)
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
-    local svc = self.light
+    local svc = self.light or self.group
     if svc and svc.setEffect then svc:setEffect(effect) end
     self:setVariable("colormode", effect == 'stop' and "" or "effect:" .. effect)
   end
@@ -181,7 +181,7 @@ function defClasses()
       local v = effect.values or effect
       effect, duration_ms = v[1], v[2]
     end
-    local svc = self.light
+    local svc = self.light or self.group
     if svc and svc.setTimedEffect then svc:setTimedEffect(effect, duration_ms) end
   end
   -- Effect UI button callbacks – one method per Hue looping effect.
