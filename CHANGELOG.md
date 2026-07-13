@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.73] - 2026-07-13
+
+## Changes in v0.2.73
+
+- ✨ **Feature**: update setEffect and setTimedEffect to support group light services
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.72] - 2026-07-13
 
 ## Changes in v0.2.72
