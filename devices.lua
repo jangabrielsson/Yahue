@@ -1246,7 +1246,7 @@ function defClasses()
   function RoomZoneQA:setEffect(effect)
     if type(effect) == 'table' then effect = (effect.values or effect)[1] end
     local e = effect == 'stop' and 'no_effect' or effect
-    self.group:rawCmd({effects={effect=e}})
+    self.group:setEffect(e)
     self:setVariable("colormode", effect == 'stop' and "" or "effect:" .. effect)
   end
   function RoomZoneQA.annotate(rsrc)
