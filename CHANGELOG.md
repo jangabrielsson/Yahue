@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.72] - 2026-07-13
+
+## Changes in v0.2.72
+
+- ✨ **Feature**: add HTML release notes for v0.2.71 and improve light service iteration in hue-resources
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.71] - 2026-07-12
 
 ## Changes in v0.2.71
