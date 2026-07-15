@@ -801,8 +801,18 @@ function defClasses()
     HueClass.__init(self,device)
     self.dimdelay = tonumber(self:getVariable("dimdelay")) or 8000
     self.transition = tonumber(self:getVariable("transition")) or 0
-    local svcs = self.dev:findServiceByType('grouped_light')
-    self.group = (svcs and svcs[1]) or self.dev
+    -- Lazy-resolve grouped_light: at init time the resource may not be
+    -- registered yet (race with refresh order). Re-resolve on first use.
+    local group = self.dev
+    self.group = setmetatable({}, {
+      __index = function(_, k)
+        if not group.turnOff then
+          local svcs = self.dev:findServiceByType('grouped_light')
+          if svcs and svcs[1] then group = svcs[1] end
+        end
+        return group[k]
+      end
+    })
 
     -- Per-member aggregation state. The Hue `grouped_light` resource does not
     -- reliably emit `on` events when only individual member lights change,
