@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.75] - 2026-07-15
+
+## Changes in v0.2.75
+
+- ✨ **Feature**: implement lazy resolution for grouped light services in defClasses function
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.74] - 2026-07-13
 
 ## Changes in v0.2.74
