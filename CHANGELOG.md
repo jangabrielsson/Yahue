@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.76] - 2026-08-10
+
+## Changes in v0.2.76
+
+- ✨ **Feature**: implement startDim method for light and grouped_light classes to enable continuous dimming
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.75] - 2026-07-15
 
 ## Changes in v0.2.75
