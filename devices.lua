@@ -645,15 +645,11 @@ function defClasses()
   end
   function DimmableLight:startLevelIncrease()
     self:print("startLevelIncrease")
-    local val = self.properties.value
-    val = ROUND((100-val)/100.0*self.dimdelay)
-    self.light:setDim(100,val)
+    self.light:startDim("up", self.dimdelay)
   end
   function DimmableLight:startLevelDecrease()
     self:print("startLevelDecrease")
-    local val = self.properties.value
-    val = ROUND((val-0)/100.0*self.dimdelay)
-    self.light:setDim(0,val)
+    self.light:startDim("down", self.dimdelay)
   end
   function DimmableLight:stopLevelChange()
     self.light:setDim(-1)
@@ -1145,15 +1141,11 @@ function defClasses()
   -- Starts a smooth ramp up to 100% over self.dimdelay ms (default 8 s).
   function RoomZoneQA:startLevelIncrease()
     self:print("startLevelIncrease")
-    local val = self.properties.value
-    val = ROUND((100-val)/100.0*self.dimdelay)
-    self.group:setDim(100,val)
+    self.group:startDim("up", self.dimdelay)
   end
   function RoomZoneQA:startLevelDecrease()
     self:print("startLevelDecrease")
-    local val = self.properties.value
-    val = ROUND((val-0)/100.0*self.dimdelay)
-    self.group:setDim(0,val)
+    self.group:startDim("down", self.dimdelay)
   end
   function RoomZoneQA:stopLevelChange()
     self.group:setDim(-1)

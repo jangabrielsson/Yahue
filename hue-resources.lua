@@ -238,6 +238,19 @@ function fibaro.hueResources.define(ctx)
     self:sendCmd({on={on=not on},dynamics=transition and {duration=transition} or nil})
   end
   function light:rawCmd(cmd) self:sendCmd(cmd) end
+  --- light:startDim(action, duration)
+  -- Starts continuous dimming up or down. action: "up" or "down".
+  -- Send dimming_delta={action="stop"} to cancel (light:setDim(-1)).
+  function light:startDim(action, duration)
+    self:sendCmd({
+      on = {on=true},
+      dimming_delta = {
+        action = action,
+        brightness_delta = 100
+      },
+      dynamics = duration and {duration=duration} or nil
+    }, 'startDim')
+  end
   function light:setTemperature(t,transition) self:sendCmd({color_temperature={mirek=math.floor(t+0.5)},dynamics=transition and {duration=transition} or nil}) end
   function light:setEffect(effect)
     local e = effect == 'stop' and 'no_effect' or effect
@@ -445,6 +458,18 @@ function fibaro.hueResources.define(ctx)
     else
       self:sendCmd({dimming={brightness=val},dynamics=transition and {duration=transition} or nil},'setDim')
     end
+  end
+  --- grouped_light:startDim(action, duration)
+  -- Starts continuous dimming up or down for the whole group.
+  function grouped_light:startDim(action, duration)
+    self:sendCmd({
+      on = {on=true},
+      dimming_delta = {
+        action = action,
+        brightness_delta = 100
+      },
+      dynamics = duration and {duration=duration} or nil
+    }, 'startDim')
   end
   function grouped_light:fadeTo(from,to,duration)
     self:sendCmd({dimming={brightness=from}},'setDim')
