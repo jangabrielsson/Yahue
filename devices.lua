@@ -891,25 +891,27 @@ function defClasses()
         for _,v in pairs(devsons) do if v then anyOn = true; break end end
       end
 
-      -- Snapshot state BEFORE aggregate updates it — needed to distinguish
-      -- "room was deliberately turned off" from "transient gap between
-      -- members going off one-by-one during a turn-off".
-      local prevState = self.properties.state
-      self:updateProperty("state", anyOn)
       -- HC3 quirk: value=0 on colorController forces state=false, so we must
       -- never write value=0 while anyOn is true. Restore from lastVal when
-      -- coming back on with no current brightness.
+      -- value was zeroed (e.g. transient off during member re-sync) or the
+      -- room is genuinely turning back on. Write value BEFORE state so HC3
+      -- doesn't force state=false on value=0.
       if anyOn then
         if self.hasDim then
           local cur = tonumber(self.properties.value) or 0
-          if cur <= 0 and prevState then
-            self:updateProperty("value", self.lastVal or 100)
+          if cur <= 0 then
+            local restore = tonumber(self.lastVal) or 100
+            if restore <= 0 then restore = 100 end
+            self.lastVal = restore
+            self:updateProperty("value", restore)
           end
         else
           self:updateProperty("value", true)
         end
+        self:updateProperty("state", true)
       else
         self:updateProperty("value", self.hasDim and 0 or false)
+        self:updateProperty("state", false)
       end
       if self.hasColor then aggregateColor() end
     end
