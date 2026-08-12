@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.77] - 2026-08-12
+
+## Changes in v0.2.77
+
+- 🐛 **Fix**: update defClasses function to correctly handle state and value updates for light devices
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.76] - 2026-08-10
 
 ## Changes in v0.2.76
