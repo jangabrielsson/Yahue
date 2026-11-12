@@ -1,0 +1,73 @@
+{
+  "runtime": {
+    "version": "Lua 5.4"
+  },
+  "diagnostics": {
+    "enable": true,
+    "globals": [
+      "QuickApp",
+      "QuickAppBase",
+      "QuickAppChild",
+      "QuickerAppChild",
+      "QwikAppChild",
+      "fibaro",
+      "api",
+      "net",
+      "json",
+      "plugin",
+      "class",
+      "hub",
+      "quickApp",
+      "setTimeout",
+      "clearTimeout",
+      "setInterval",
+      "clearInterval",
+      "exit",
+      "RefreshStateSubscriber",
+      "sourceTrigger",
+      "UDPServer",
+      "__TAG",
+      "___id",
+      "_sceneId",
+      "__print",
+      "__setTimeout",
+      "__clearTimeout",
+      "__fibaroUseAsyncHandler",
+      "__fibaroSleep",
+      "__fibaro_get_global_variable",
+      "__fibaro_get_device",
+      "__fibaro_get_devices",
+      "__fibaro_get_room",
+      "__fibaro_get_scene",
+      "__fibaro_get_device_property",
+      "__fibaro_get_breached_partitions",
+      "__fibaro_get_partition",
+      "__fibaro_add_debug_message",
+      "__assert_type",
+      "urlencode",
+      "_FLUA",
+      "NONE",
+      "ERROR",
+      "WARNING",
+      "DEBUG",
+      "TRACE",
+      "LOG_LEVEL",
+      "COND"
+    ]
+  },
+  "workspace": {
+    "library": [
+      ".luals"
+    ],
+    "checkThirdParty": false,
+    "ignoreDir": [
+      ".github/skills/quickapp-types/templates",
+      ".venv",
+      "src/flua/setup_templates/luals",
+      "node_modules"
+    ]
+  },
+  "hint": {
+    "enable": true
+  }
+}

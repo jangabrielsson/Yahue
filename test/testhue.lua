@@ -5,7 +5,7 @@
 -- Diagnoses the Hue bridge's actual rate-limit characteristics by
 -- sending controlled bursts of GET requests to a known light resource.
 --
--- Usage:  plua test/testhue.lua
+-- Usage:  flua test/testhue.lua
 --
 -- Auto-discovers a light on the bridge; no manual ID needed.
 -- Expected runtime: ~2-5 minutes depending on cooldown behaviour.

@@ -70,7 +70,7 @@ fibaro.scene("kill", {10})
 
 ---
 
-## Profiles (9 endpoints)
+## Profiles (11 endpoints)
 
 ### Profile Management
 - `GET /api/profiles` — Get all user profiles
@@ -145,7 +145,7 @@ fibaro.emitCustomEvent("MotionAlert")
 
 ---
 
-## Global Variables (4 endpoints)
+## Global Variables (5 endpoints)
 
 ### Variable Management
 - `GET /api/globalVariables` — List all global variables

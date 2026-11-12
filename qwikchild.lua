@@ -403,7 +403,7 @@ do
   
   function QuickApp:initChildren(children) -- 
     -- CHeck if we run in emulator and warn if not setup correctly
-    if fibaro.plua then 
+    if _FLUA then
         self:warning("Recommend to have a state file for remembering children between runs in offline mode")
         --os.exit(-1)
     end

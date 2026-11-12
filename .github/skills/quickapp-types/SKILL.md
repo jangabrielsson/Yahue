@@ -1,22 +1,22 @@
 ---
 name: quickapp-types
-description: All Fibaro device types (40+ types: switches, sensors, climate, covers, controllers), plua file headers (--%%name, --%%type, --%%var, --%%u:, --%%debug, etc.), UI element syntax (label, button, slider, switch, select, multi), and minimal starter templates for each device category. USE FOR: creating a new QuickApp, choosing the right device type (e.g. "what type for a temperature sensor?"), defining UI elements, understanding required actions per device type.
+description: All Fibaro device types (40+ types: switches, sensors, climate, covers, controllers), flua file headers (--%%name, --%%type, --%%var, --%%u:, --%%debug, etc.), UI element syntax (label, button, slider, switch, select, multi), and minimal starter templates for each device category. USE FOR: creating a new QuickApp, choosing the right device type (e.g. "what type for a temperature sensor?"), defining UI elements, understanding required actions per device type.
 ---
 
 # QuickApp Device Types and Headers
 
-Reference for all plua QuickApp file headers and the complete set of Fibaro device types.
+Reference for all flua QuickApp file headers and the complete set of Fibaro device types.
 
-Starter Lua templates are in the [`templates/`](./templates/) directory — reference them when the user needs a working skeleton for a specific device type.
+Starter Lua templates are in the [`templates/`](./templates/) directory — the complete set (30 device types), one file per type, each with the type's canonical actions and property conventions (e.g. `multilevelSwitch.lua` handles `turnOn`/`turnOff`/`setValue` with `value` 0-99; `temperatureSensor.lua` asserts `{value=, unit=}`). Reference them when the user needs a working skeleton for a specific device type, and scaffold one with `flua --tool newQA <type> [name]` (lists all types with no argument).
 
 ---
 
-## plua Header Syntax
+## flua Header Syntax
 
 ```lua
 --%%key:value
 ```
-Headers are Lua comments processed by plua before execution. All headers must appear before any Lua code.
+Headers are Lua comments processed by flua before execution. All headers must appear before any Lua code.
 
 ---
 
@@ -52,20 +52,29 @@ Headers are Lua comments processed by plua before execution. All headers must ap
 ```lua
 --%%file:./lib/utils.lua,utils   -- include external Lua file (path, module name)
 ```
-To include a plua library file, use `--%%file:$fibaro.lib.libraryName,alias` (e.g. `--%%file:$fibaro.lib.qwikchild,qwikchild`)
+To include a library file, use `--%%file:$fibaro.lib.libraryName,alias` (e.g. `--%%file:$fibaro.lib.qwikchild,qwikchild`)
 
 ## Development & Debug Headers
 
 ```lua
---%%debug:true        -- verbose debug logging
---%%desktop:true      -- auto-open QuickApp UI desktop window
---%%offline:true      -- run without HC3 connection
---%%breakonload:true  -- pause in debugger immediately on load
---%%save:state.json   -- persist state across restarts
---%%project:1001      -- associate with HC3 device ID for upload/sync
---%%proxy:true        -- enable proxy mode (sync with real HC3 QA)
---%%qacolor:lightblue -- background color of the QA desktop window
+--%%debug:refreshState=true,api=true,http=true  -- debug logging channels
+--%%offline:true      -- legacy alias for --%%mode:offline
+--%%mode:online|offline|proxy  -- runtime mode; proxy needs online + HC3 credentials
+--%%warn:true         -- extra runtime warnings (e.g. api error statuses)
+--%%db:file.json      -- seed data; --%%db:+file.json also persists state across restarts
+--%%location:latitude=N,longitude=N  -- pin the sim's location (sun times)
+--%%keep-alive:true   -- online: keep the run alive past idle
+--%%scene:true        -- run this QA as an HC3 Lua scene
+--%%uid:x / --%%description:x / --%%model:x / --%%build:x / --%%manufacturer:x
+                      -- device properties
+--%%clobber:name=value -- plua's --%%conceal: the PACKAGE value, taken RAW
+                      -- (no Lua evaluation — don't quote it)
 ```
+
+`--%%save`, `--%%desktop`, `--%%breakonload`, `--%%project` and `--%%qacolor`
+are **plua directives flua does not implement** (ignored/unknown) — remove
+them when migrating. `--%%proxy:true` is the legacy alias for
+`--%%mode:proxy`, not a casual flag.
 
 ---
 
@@ -86,8 +95,8 @@ Each `--%%u:` line defines one row. Use `{{...},{...}}` for multiple elements on
 
 ### Switch (toggle)
 ```lua
---%%u:{switch="autoSwitch",text="Auto Mode",value="false",onToggled="handleSwitch"}
--- event.values[1] == true/false (boolean)
+--%%u:{switch="autoSwitch",text="Auto Mode",value="false",onToggleOn="handleOn",onToggleOff="handleOff"}
+-- 5.221 split events (also onReleased); event.values[1] == "true"/"false" (string)
 ```
 
 ### Slider
@@ -112,6 +121,7 @@ Each `--%%u:` line defines one row. Use `{{...},{...}}` for multiple elements on
 ```lua
 --%%u:{{button="onBtn",text="On",onReleased="turnOn"},{button="offBtn",text="Off",onReleased="turnOff"}}
 ```
+
 
 ### Updating dropdowns at runtime
 

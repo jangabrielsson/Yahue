@@ -141,8 +141,8 @@ check_dependencies() {
         missing_deps+=("git")
     fi
     
-    if ! command_exists "plua"; then
-        missing_deps+=("plua")
+    if ! command_exists "flua"; then
+        missing_deps+=("flua")
     fi
     
     if ! command_exists "gh"; then
@@ -154,7 +154,7 @@ check_dependencies() {
         echo ""
         echo "To install missing dependencies:"
         echo "  - git: https://git-scm.com/downloads"
-        echo "  - plua: https://github.com/jangabrielsson/plua"
+        echo "  - flua: https://github.com/jangabrielsson/flua"
         echo "  - gh: https://cli.github.com/ or 'brew install gh'"
         exit 1
     fi

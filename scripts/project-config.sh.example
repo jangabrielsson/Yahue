@@ -51,14 +51,14 @@ DIST_DIR="dist"
 # The build_command can use {SOURCE} and {OUTPUT} placeholders
 # 
 # Common examples:
-#   - Fibaro .fqa files: "plua -t pack {SOURCE} {OUTPUT}"
+#   - Fibaro .fqa files: "flua -t pack {SOURCE} -o {OUTPUT} -f"
 #   - Zip archives: "zip -j {OUTPUT} {SOURCE}"
 #   - Copy files: "cp {SOURCE} {OUTPUT}"
 #
 # Multiple artifacts example:
 declare -a ARTIFACTS=(
-    "src/main.lua:dist/MyProject.fqa:plua -t pack {SOURCE} {OUTPUT}"
-    "src/addon.lua:dist/MyAddon.fqa:plua -t pack {SOURCE} {OUTPUT}"
+    "src/main.lua:dist/MyProject.fqa:flua -t pack {SOURCE} -o {OUTPUT} -f"
+    "src/addon.lua:dist/MyAddon.fqa:flua -t pack {SOURCE} -o {OUTPUT} -f"
 )
 
 # Files to include in git commits for releases

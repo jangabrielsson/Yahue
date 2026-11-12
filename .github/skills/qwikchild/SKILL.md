@@ -1,16 +1,16 @@
 ---
 name: qwikchild
-description: How to use the QwikAppChild library (--%%file:$fibaro.lib.qwikchild,qwikchild) for managing QuickApp child devices with UID-based addressing, declarative child definitions, per-child UI, internalStorage variables, and UI event routing to children. USE FOR: creating/loading/removing child devices, attaching UI to a child, routing UI callbacks to child methods, persisting child-scoped state, one-shot or declarative child management patterns.
+description: How to use the QwikAppChild library (--%%file:$qwikchild.lua,qwikchild) for managing QuickApp child devices with UID-based addressing, declarative child definitions, per-child UI, internalStorage variables, and UI event routing to children. USE FOR: creating/loading/removing child devices, attaching UI to a child, routing UI callbacks to child methods, persisting child-scoped state, one-shot or declarative child management patterns.
 ---
 
 # QwikAppChild Library
 
-`QwikAppChild` is a plua built-in library that extends Fibaro's `QuickAppChild` with UID-based child management, declarative child definitions, per-child UI support, and automatic UI event routing.
+`QwikAppChild` is a built-in library that extends Fibaro's `QuickAppChild` with UID-based child management, declarative child definitions, per-child UI support, and automatic UI event routing.
 
 ## Include It
 
 ```lua
---%%file:$fibaro.lib.qwikchild,qwikchild
+--%%file:$qwikchild.lua,qwikchild
 ```
 
 Add this header to your QA file. No `require` needed — the file is executed on load and registers everything globally.
@@ -58,10 +58,11 @@ local children = {
 }
 
 function QuickApp:onInit()
-  quickApp = self
-  function self.initChildDevices() end   -- suppress default child init
   self:initChildren(children)
 end
+
+-- (quickApp is set by the library itself, and it already suppresses the
+-- default child init — no boilerplate needed.)
 ```
 
 > **UID naming tip:** UIDs starting with `"i"` followed by a digit (e.g. `"i1"`, `"i2"`) are sorted numerically during creation — useful to control creation order.
@@ -95,8 +96,6 @@ Loads previously created children from HC3 without modifying them. Pass a defini
 
 ```lua
 function QuickApp:onInit()
-  quickApp = self
-  function self.initChildDevices() end
   self:loadExistingChildren()   -- load all children found on HC3
 end
 ```
@@ -236,13 +235,21 @@ fibaro.debugFlags.qwikchild = false  -- silence it
 
 ---
 
+## The living example
+
+`examples/qwikchildtest.lua` — two children with UIs, self-tested: the QA
+injects UI events through the same REST route the HC3 UI viewer uses
+(`/plugins/callUIEvent?deviceID=..&elementName=..&eventType=..`) and
+asserts the children reacted (label updated, property changed). Copy the
+pattern for your own tests.
+
 ## Full Minimal Example
 
 ```lua
 --%%name:MultiSensor Hub
 --%%type:com.fibaro.deviceController
 --%%offline:true
---%%file:$fibaro.lib.qwikchild,qwikchild
+--%%file:$qwikchild.lua,qwikchild
 
 class "RoomSensor"(QwikAppChild)
 
@@ -274,8 +281,6 @@ local CHILDREN = {
 }
 
 function QuickApp:onInit()
-  quickApp = self
-  function self.initChildDevices() end
   self:initChildren(CHILDREN)
 end
 ```
@@ -284,8 +289,19 @@ end
 
 ## Common Gotchas
 
-- **`quickApp = self`** must be set at the top of `onInit` — the library internally references the `quickApp` global.
-- **`function self.initChildDevices() end`** — always suppress the default Fibaro child init to prevent double-init when using this library.
-- **`initChildren` recreates children** — it deletes any child with a matching UID and creates a fresh one. On a real HC3, child device IDs change on recreation. Use `loadExistingChildren` if you want to preserve IDs between restarts.
-- **plua offline mode warning** — `initChildren` prints a warning if running in plua without a state file, because children are re-created on every run (IDs change). Use `--%%save:state.json` to persist state.
+- **`quickApp = self`** — the library sets the `quickApp` global itself
+  (`createChild`/`loadExistingChildren` do it); setting it yourself is
+  harmless insurance, not a requirement.
+- **`initChildDevices`** — the library already overrides the default child
+  init with a no-op; you do not need to suppress it yourself.
+- **`initChildren` attaches or creates** — existing children (matched by
+  UID through their internalStorage) are LOADED and reused, not recreated;
+  only missing ones are created, and undefined ones are removed. That is
+  the whole point: the same code runs on a fresh HC3 and on one with
+  existing children. `createChild` is the one that deletes-and-recreates a
+  child with the same UID.
+- **flua offline mode** — children are sim devices: they vanish between
+  runs unless state is persisted. `initChildren` warns about it; pin state
+  with `--%%db:+file.json` (the plua `--%%save:` directive is not a flua
+  thing).
 - **UID uniqueness** — UIDs must be unique within a parent QA. The library uses them as stable identifiers; duplicate UIDs cause the old child to be deleted.

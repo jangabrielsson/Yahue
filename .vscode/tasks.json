@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flua: Upload file to HC3",
+      "type": "process",
+      "command": "/opt/homebrew/bin/flua",
+      "args": ["--tool", "uploadFile", "${file}"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    }
+  ]
+}

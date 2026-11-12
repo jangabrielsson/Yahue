@@ -75,60 +75,6 @@ function fibaro.hueTransport.define(ctx)
     end
   end
 
-  local function fetchEvents_emu()
-    local getw
-    local eurl = ctx.url.."/eventstream/clip/v2"
-    local backoff = 0
-    local args = { options = { 
-      method='GET', 
-      checkCertificate=false, 
-      headers={ 
-        ['hue-application-key'] = ctx.app_key,
-        ['Accept'] = "application/json",
-      }}
-    }
-    local function bumpBackoff()
-      if backoff == 0 then backoff = 1000
-      else backoff = math.min(backoff * 2, 30000) end
-      return backoff
-    end
-    function args.success(res)
-      if res and res.status and res.status >= 300 then
-        if res.status == 429 then
-          local ra = parseRetryAfter(res)
-          enterCooldown(ra, "SSE")
-          local d = math.max(bridgeWaitMs(), bumpBackoff())
-          WARNING("/eventstream: HTTP 429 (retry in %dms)", d)
-          setTimeout(getw, d)
-        else
-          local d = math.max(bridgeWaitMs(), bumpBackoff())
-          WARNING("/eventstream: HTTP %d (retry in %dms)", res.status, d)
-          setTimeout(getw, d)
-        end
-        return
-      end
-      backoff = 0
-      local ok,err = pcall(function()
-        local data = json.decode(res.data)
-        handle_events(data)
-      end)
-      if not ok then WARNING("/eventstream parse: %s", tostring(err)) end
-      getw()
-    end
-    function args.error(err)
-      local transient = err and (err:match("timed out") or err == "wantread")
-      if not transient then
-        local d = bumpBackoff()
-        WARNING("/eventstream: %s (retry in %dms)", err, d)
-        setTimeout(getw, d)
-      else
-        getw()
-      end
-    end
-    function getw() net.HTTPClient():request(eurl,args) end
-    setTimeout(getw,0)
-  end
-
   local function fetchEvents_hc3()
     local getw
     local eurl = ctx.url.."/eventstream/clip/v2"
@@ -229,8 +175,6 @@ function fibaro.hueTransport.define(ctx)
     setTimeout(getw,0)
   end
 
-  if fibaro.plua then fetchEvents = fetchEvents_emu
-  else fetchEvents = fetchEvents_hc3 end
   fetchEvents = fetchEvents_hc3
   ---------------------------------------------------------------------------
   -- HTTP TRANSPORT

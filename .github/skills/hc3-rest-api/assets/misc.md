@@ -48,6 +48,21 @@ Full reference for Panels/UI (20), Data & Monitoring (13), and Miscellaneous (16
 ### Family Panel (1 endpoint)
 - `GET /api/panels/family` — Get family user tracking data (supports time range query params)
 
+### Proxy fetch (1 endpoint)
+- `GET /api/proxy?url=<url>` — the HC3's UI helper: a server-side GET that
+  returns `(body, status)`. Embedded basic auth works
+  (`?url=http://user:pass@127.0.0.1/api/...` — the classic restricted-endpoint
+  workaround). 400 without `url`, 502 on transport failure. In flua it is a
+  REAL HTTP fetch: offline it hits whatever URL you give it — the sim has no
+  zigbee routes, so `/api/zigbee/...` calls only resolve in online mode.
+  QAs on the HC3 also use the loopback-only credential-free API
+  (`http://127.0.0.1:11111/api/...` and its rumoured TLS twin on 11112 — no
+  credentials needed on the controller): flua detects both ports and
+  rewrites them to the controller's standard API with the configured HC3
+  credentials (in `api.get('/proxy?...')` AND in `net.HTTPClient` calls).
+  JSON bodies come back decoded (like the HC3's `api.get`); anything else
+  is the raw string.
+
 ### Favorite Colors (6 endpoints)
 
 Used for color picker presets in RGB/color devices.
@@ -81,7 +96,10 @@ Used for color picker presets in RGB/color devices.
 - `GET /api/debugMessages/tags` — Available debug tags
 
 ### Diagnostics (2 endpoints)
-- `GET /api/diagnostics` — System diagnostic information
+- `GET /api/diagnostics` — System diagnostic information:
+  `{cpuLoad: [{name, user, nice, system, idle}, …per cpu] (string jiffy
+  counters), memory: {free, cache, buffers, used} (percent),
+  storage: {internal: [{name, used}]}}`
 - `GET /api/apps/com.fibaro.zwave/diagnostics/transmissions` — Z-Wave transmission diagnostics
 
 ### Refresh States (1 endpoint)
@@ -144,15 +162,24 @@ print(w.Temperature, w.WeatherCondition)
 ## Miscellaneous
 
 ### Icons (3 endpoints)
-- `GET /api/icons` — List available icons
-- `POST /api/icons` — Upload new icon
-  ```json
-  { "name": "my_icon", "content": "data:image/png;base64,..." }
-  ```
-- `DELETE /api/icons` — Delete icon
-  ```json
-  { "type": "custom", "name": "my_icon", "fileExtension": "svg" }
-  ```
+- `GET /api/icons` — list icons (query: `deviceType`; response shape varies across
+  firmwares — accept both list-of-icon-objects and `{icons: [...]}`)
+- `POST /api/icons` — upload an **icon set** (observed on 5.x firmware; the swagger
+  schema is empty, `multipart/form-data`):
+  - `type=device`, `deviceTemplate=<exact device type>` (e.g. `com.fibaro.rollerShutter`)
+  - one file per state: `icon0` only (single-image types), `icon0` + `icon100` (binary),
+    or `icon0`…`icon100` (multilevel, 11 images)
+  - `fileExtension=png` (svg also accepted)
+  - → **201** `{"id": 1055, "iconSetName": "User1055", "fileExtension": "png"}`;
+    user icon ids start around 1000. Re-uploading the same set creates a **duplicate** —
+    list first and reuse an existing id.
+- `DELETE /api/icons?id=&type=&name=&fileExtension=` — delete an icon
+
+Applying: `PUT /api/devices/{id}` `{"properties": {"deviceIcon": <iconId>}}` from outside.
+Inside a QA use `self:updateProperty("deviceIcon", id)` — a device PUT on your own id
+restarts the QA (hc3-write-safety). State-dependent icons: upload one set per state, keep
+the ids in QA variables, switch with `updateProperty`. Single-image types (deviceController,
+sensors, most QA parents) cannot change their picture by themselves.
 
 ### RGB Programs (5 endpoints)
 - `GET /api/RGBPrograms` — List all RGB programs
@@ -190,7 +217,7 @@ print(w.Temperature, w.WeatherCondition)
   ```
 
 ### System Control
-- `POST /api/service/factoryReset` — Perform factory reset (**destructive**)
+- `POST /api/factoryReset` — Perform factory reset (**destructive**)
 - `POST /api/service/reboot` — Reboot the system
 
 ### UI Sort Order

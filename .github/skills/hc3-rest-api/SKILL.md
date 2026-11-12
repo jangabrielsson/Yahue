@@ -1,6 +1,6 @@
 ---
 name: hc3-rest-api
-description: HC3 REST API reference: quick-reference for the most-used ~60 endpoints inline, plus full 269-endpoint coverage via assets/ subdirectory (5 files grouped by category: devices, scenes-automation, energy-climate, system, misc). Includes Lua api.* examples for each endpoint. USE FOR: calling HC3 REST endpoints from QA code or externally, understanding request/response shapes, filtering devices, triggering scenes or events. Ask the agent to read a specific asset file for deep coverage of any category.
+description: HC3 REST API reference: quick-reference for the most-used ~60 endpoints inline, plus ~250 endpoints covered in the assets/ subdirectory (5 files grouped by category: devices, scenes-automation, energy-climate, system, misc). Includes Lua api.* examples for each endpoint. USE FOR: calling HC3 REST endpoints from QA code or externally, understanding request/response shapes, filtering devices, triggering scenes or events. Ask the agent to read a specific asset file for deep coverage of any category.
 ---
 
 # HC3 REST API Reference
@@ -11,45 +11,48 @@ Condensed reference for the most-used Fibaro HC3 REST API endpoints. In QuickApp
 
 ## Querying the live HC3 from the terminal
 
-Use `plua --fibaro -e "..."` to run one-off API queries against the real HC3 without writing a script. Credentials are taken from plua's existing HC3 configuration.
+Use `flua --api remote -e "..."` to run one-off API queries against the
+real HC3 without writing a script. Credentials come from the .env chain.
 
-Two patterns for handling `api.get`'s two return values (data, httpStatus):
+`api.get` returns two values (data, httpStatus); passing it straight to
+`json.encode` keeps the data (the first value):
 
 ```bash
-# Pattern 1: ((...)) — discard HTTP status, clean JSON output
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/devices/45')))"
+# Pattern 1: clean JSON output
+flua --api remote -e "print(json.encode(api.get('/devices/45')))"
 
-# Pattern 2: {...} — include HTTP status as second element (useful for debugging)
-plua --fibaro --nodebugger -e "json.encodeFormated({api.get('/devices/45')})"
+# Pattern 2: include the HTTP status as the second element (useful for debugging)
+flua --api remote -e "print(json.encode({api.get('/devices/45')}))"
 # Output: [ <data>, 200 ]
 ```
 
-Use Pattern 2 when you want to confirm the endpoint succeeded (status 200) vs returned an error.
+Use Pattern 2 when you want to confirm the endpoint succeeded (status 200)
+vs returned an error.
 
 ```bash
 # List all QuickApps
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/devices?interface=quickApp')))"
+flua --api remote -e "print(json.encode(api.get('/devices?interface=quickApp')))"
 
 # List all devices of a specific type
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/devices?type=com.fibaro.binarySwitch')))"
+flua --api remote -e "print(json.encode(api.get('/devices?type=com.fibaro.binarySwitch')))"
 
 # Get a specific device property
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/devices/45/properties/value')))"
+flua --api remote -e "print(json.encode(api.get('/devices/45/properties/value')))"
 
 # Get all QA variables for device 45
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/plugins/45/variables')))"
+flua --api remote -e "print(json.encode(api.get('/plugins/45/variables')))"
 
 # Get a global variable
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/globalVariables/myVar')))"
+flua --api remote -e "print(json.encode(api.get('/globalVariables/myVar')))"
 
 # Energy consumption summary (period is a date: YYYY-MM-DD)
-plua --fibaro --nodebugger -e "json.encodeFormated({api.get('/energy/consumption/summary?period=2026-03-27')})"
+flua --api remote -e "print(json.encode({api.get('/energy/consumption/summary?period=2026-03-27')}))"
 
 # List all rooms
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/rooms')))"
+flua --api remote -e "print(json.encode(api.get('/rooms')))"
 
 # List all scenes
-plua --fibaro --nodebugger -e "json.encodeFormated((api.get('/scenes')))"
+flua --api remote -e "print(json.encode(api.get('/scenes')))"
 ```
 
 Use this to inspect real device structures before writing code that reads or updates them.
@@ -65,7 +68,6 @@ GET  /api/devices?interface=quickApp           -- filter by interface
 GET  /api/devices?type=com.fibaro.binarySwitch -- filter by type
 GET  /api/devices?roomID=5                     -- filter by room
 GET  /api/devices/{id}                         -- single device
-GET  /api/devices/{id}/properties             -- all properties
 GET  /api/devices/{id}/properties/{propName}  -- one property
 ```
 
@@ -156,6 +158,42 @@ api.put("/quickApp/42/files/main", {
 })
 ```
 
+### Creating a QuickApp — the apiVersion marker decides, not the endpoint
+
+The JSON `POST /api/quickApp` create preserves the package verbatim —
+custom uiCallbacks included — **when it carries
+`initialProperties.apiVersion: "1.3"`** (flua's pack always writes the
+marker; hand-built structures must add it themselves). Without the
+marker the controller treats the package as legacy and RE-DERIVES the UI
+callbacks with generated default names (`ui<b2>OnReleased`) on recent
+firmware (live-verified 5.22x). Symptom: buttons die with "Class does
+not have uib2OnReleased function defined - action ignored".
+
+**`POST /api/quickApp/import` preserves an .fqa package verbatim
+regardless of the marker** and remains an equivalent alternative — it is
+the path the HC3 web UI's Import button uses. Its wire format is
+`multipart/form-data`:
+
+- part `file` — the .fqa JSON, **with a `filename`** (a filename-less
+  part crashes the import handler with a bodyless HTTP 500);
+- part `roomId` — optional;
+- header `X-Fibaro-Version: 2` rides along like the browser's interceptor.
+
+flua's tools already do this: `--tool uploadFQA`, `--tool uploadQA` (new
+QA), `--tool installHelper`, and the proxy deploy all use the import
+endpoint against a real HC3 (the offline sim keeps the JSON create, which
+never re-derives), and flua-packed .fqas carry the apiVersion marker.
+Symptom elsewhere: a QA whose buttons call `uib2OnReleased` was created
+from a package without the marker through the JSON API-create — re-import
+it or add the marker.
+
+A QA can install another .fqa itself (QA-installs-QA): with an
+apiVersion-carrying package, a plain
+`api.post('/quickApp/', json.encode(fqa))` works; for any other package,
+hand-build the multipart body and send it via net.HTTPClient to the
+loopback `http://127.0.0.1:11111/api/quickApp/import` — see the
+quickapp-patterns skill for both ready-made recipes.
+
 ---
 
 ## Global Variables
@@ -183,9 +221,11 @@ fibaro.setGlobalVariable("HomeMode", "Away")
 ## Custom Events
 
 ```
-GET    /api/customEvents           -- list all
-POST   /api/customEvents           -- create: {name, userDescription}
-POST   /api/customEvents/{name}    -- trigger event
+GET  /api/customEvents           -- list all
+POST /api/customEvents           -- create: {name, userDescription}
+PUT  /api/customEvents/{name}    -- update name/userDescription
+POST /api/customEvents/{name}    -- trigger event
+GET  /api/customEvents/{name}/publish  -- trigger event (GET form)
 DELETE /api/customEvents/{name}
 ```
 
@@ -222,12 +262,17 @@ fibaro.scene("kill", 10)
 ## Alarm Partitions
 
 ```
-GET  /api/alarms/v1/partitions
-POST /api/alarms/v1/partitions/{id}/actions   -- arm/disarm/breach
+GET    /api/alarms/v1/partitions
+POST   /api/alarms/v1/partitions/actions/arm            -- arm all
+POST   /api/alarms/v1/partitions/actions/tryArm         -- try to arm all
+DELETE /api/alarms/v1/partitions/actions/arm            -- disarm all
+POST   /api/alarms/v1/partitions/{partitionID}/actions/arm
+POST   /api/alarms/v1/partitions/{partitionID}/actions/tryArm
+DELETE /api/alarms/v1/partitions/{partitionID}/actions/arm  -- disarm
 ```
 
 ```lua
-api.post("/alarms/v1/partitions/1/actions", { type = "arm" })
+api.post("/alarms/v1/partitions/1/actions/arm")
 fibaro.alarm(1, "arm")
 fibaro.alarm(1, "disarm")
 ```
@@ -330,22 +375,22 @@ Fields: `Temperature`, `Humidity`, `Wind`, `WeatherCondition`, `ConditionCode`.
 
 ```
 GET    /api/debugMessages   -- recent log entries
-POST   /api/debugMessages   -- add entry
 DELETE /api/debugMessages   -- clear
+GET    /api/debugMessages/tags  -- distinct QA tags
 ```
 
 ---
 
 ## Full Endpoint Reference
 
-Detailed coverage of all 269 HC3 REST endpoints is in the `assets/` subdirectory alongside this skill. These files are distributed with the `/install-qa-skills` installer and available in any workspace that has installed the skills.
+Detailed coverage of ~250 HC3 REST endpoints is in the `assets/` subdirectory alongside this skill. These files are distributed with the `/install-qa-skills` installer and available in any workspace that has installed the skills.
 
 Ask the agent to read the relevant file when you need deeper coverage:
 
 | File | Contents | Endpoints |
 |------|----------|-----------|
-| `.github/skills/hc3-rest-api/assets/devices.md` | Devices, Plugins, QuickApp files, Interfaces | 59 |
-| `.github/skills/hc3-rest-api/assets/scenes-automation.md` | Scenes, Profiles, Custom Events, Global Variables | 35 |
+| `.github/skills/hc3-rest-api/assets/devices.md` | Devices, Plugins, QuickApp files, Interfaces | 43 |
+| `.github/skills/hc3-rest-api/assets/scenes-automation.md` | Scenes, Profiles, Custom Events, Global Variables | 38 |
 | `.github/skills/hc3-rest-api/assets/energy-climate.md` | Energy, Billing, Climate, Humidity, Sprinklers | 52 |
-| `.github/skills/hc3-rest-api/assets/system.md` | Network, Users, Alarms, Rooms, Sections | 55 |
-| `.github/skills/hc3-rest-api/assets/misc.md` | Notifications, Location, Debug, Weather, Icons, RGB, Push, System | 46 |
+| `.github/skills/hc3-rest-api/assets/system.md` | Network, Users, Alarms, Rooms, Sections | 60 |
+| `.github/skills/hc3-rest-api/assets/misc.md` | Notifications, Location, Debug, Weather, Icons, RGB, Push, System | 55 |

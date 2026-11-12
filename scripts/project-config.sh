@@ -41,7 +41,7 @@ DIST_DIR="dist"
 # Format: "source_file:output_file:build_command"
 # The build_command can use {SOURCE} and {OUTPUT} placeholders
 declare -a ARTIFACTS=(
-    "Yahue.lua:dist/Yahue.fqa:plua -t pack {SOURCE} {OUTPUT}"
+    "Yahue.lua:dist/Yahue.fqa:flua -t pack {SOURCE} -o {OUTPUT} -f"
 )
 
 # Files to include in git commits for releases

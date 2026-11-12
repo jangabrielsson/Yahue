@@ -1,12 +1,12 @@
 ---
 mode: agent
-description: Downloads and installs plua QuickApp development skills and auto-apply instructions from github.com/jangabrielsson/plua into this workspace. Safe to re-run for updates.
+description: Downloads and installs flua QuickApp development skills and auto-apply instructions from github.com/jangabrielsson/flua into this workspace. Safe to re-run for updates.
 skill_version: "1.1.0"
 ---
 
 <!-- SKILL VERSION: 1.1.0 -->
 
-Install / update the plua QuickApp development skills in this workspace.
+Install / update the flua QuickApp development skills in this workspace.
 
 ## Bootstrap — get this file first
 
@@ -14,18 +14,18 @@ Before you can run `/install-qa-skills`, you need this prompt file in your works
 
 **Universal (Python — macOS, Linux, Windows):**
 ```
-python3 -c "import urllib.request,pathlib; pathlib.Path('.github/prompts').mkdir(parents=True,exist_ok=True); urllib.request.urlretrieve('https://raw.githubusercontent.com/jangabrielsson/plua/main/.github/prompts/install-qa-skills.prompt.md','.github/prompts/install-qa-skills.prompt.md'); print('Done')"
+python3 -c "import urllib.request,pathlib; pathlib.Path('.github/prompts').mkdir(parents=True,exist_ok=True); urllib.request.urlretrieve('https://raw.githubusercontent.com/jangabrielsson/flua/main/.github/prompts/install-qa-skills.prompt.md','.github/prompts/install-qa-skills.prompt.md'); print('Done')"
 ```
 > On Windows, replace `python3` with `python` if needed.
 
 **macOS / Linux (curl):**
 ```bash
-mkdir -p .github/prompts && curl -sL https://raw.githubusercontent.com/jangabrielsson/plua/main/.github/prompts/install-qa-skills.prompt.md -o .github/prompts/install-qa-skills.prompt.md
+mkdir -p .github/prompts && curl -sL https://raw.githubusercontent.com/jangabrielsson/flua/main/.github/prompts/install-qa-skills.prompt.md -o .github/prompts/install-qa-skills.prompt.md
 ```
 
 **Windows (PowerShell):**
 ```powershell
-New-Item -ItemType Directory -Force .github/prompts | Out-Null; Invoke-WebRequest https://raw.githubusercontent.com/jangabrielsson/plua/main/.github/prompts/install-qa-skills.prompt.md -OutFile .github/prompts/install-qa-skills.prompt.md
+New-Item -ItemType Directory -Force .github/prompts | Out-Null; Invoke-WebRequest https://raw.githubusercontent.com/jangabrielsson/flua/main/.github/prompts/install-qa-skills.prompt.md -OutFile .github/prompts/install-qa-skills.prompt.md
 ```
 
 Then in VS Code Copilot Chat: type `/install-qa-skills` and the agent will download all skills automatically.
@@ -33,7 +33,7 @@ Then in VS Code Copilot Chat: type `/install-qa-skills` and the agent will downl
 ---
 
 ## What this does
-- Downloads `.github/skills/` (7 skills with Lua templates) and `.github/instructions/quickapp-dev.instructions.md` from the public `jangabrielsson/plua` GitHub repo
+- Downloads `.github/skills/` (skills with Lua templates) and `.github/instructions/quickapp-dev.instructions.md` from the public `jangabrielsson/flua` GitHub repo
 - Adds or updates the `## QuickApp Development Skills` section in `.github/copilot-instructions.md`
 
 ## Step 1 — Download files
@@ -47,7 +47,7 @@ Instead, use the `create_file` tool to write the script to a temp file, run it, 
 ```python
 import urllib.request, json, pathlib, sys
 
-REPO = 'jangabrielsson/plua'
+REPO = 'jangabrielsson/flua'
 BRANCH = 'main'
 
 def raw(path):
@@ -56,7 +56,7 @@ def raw(path):
 print('Fetching file list from GitHub...')
 req = urllib.request.Request(
     f'https://api.github.com/repos/{REPO}/git/trees/{BRANCH}?recursive=1',
-    headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'plua-skill-installer'}
+    headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'flua-skill-installer'}
 )
 try:
     with urllib.request.urlopen(req) as r:
@@ -99,7 +99,7 @@ if errors:
 
 If the GitHub API rate-limits you, use the git fallback:
 ```
-git clone --no-checkout --depth=1 https://github.com/jangabrielsson/plua.git _plua_tmp && cd _plua_tmp && git sparse-checkout set .github/skills .github/instructions && git checkout && cd .. && cp -r _plua_tmp/.github/skills .github/ && mkdir -p .github/instructions && cp _plua_tmp/.github/instructions/quickapp-dev.instructions.md .github/instructions/ && rm -rf _plua_tmp
+git clone --no-checkout --depth=1 https://github.com/jangabrielsson/flua.git _flua_tmp && cd _flua_tmp && git sparse-checkout set .github/skills .github/instructions && git checkout && cd .. && cp -r _flua_tmp/.github/skills .github/ && mkdir -p .github/instructions && cp _flua_tmp/.github/instructions/quickapp-dev.instructions.md .github/instructions/ && rm -rf _flua_tmp
 ```
 
 ## Step 2 — Update .github/copilot-instructions.md
@@ -117,7 +117,7 @@ The section to write:
 
 Skill version: **1.1.0**
 
-Skills for Fibaro HC3 QuickApp development with plua, auto-discovered from `.github/skills/`.
+Skills for Fibaro HC3 QuickApp development with flua, auto-discovered from `.github/skills/`.
 The instruction file `.github/instructions/quickapp-dev.instructions.md` is auto-applied to all `*.lua` files.
 
 Type a slash command in Copilot chat for detailed reference:
@@ -127,10 +127,11 @@ Type a slash command in Copilot chat for detailed reference:
 - `/quickapp-patterns` — timer loops, refreshStates, HTTP, children, state persistence
 - `/hc3-rest-api` — HC3 REST endpoints with examples
 - `/lua-basics` — Lua language reference for non-Lua developers
-- `/plua-troubleshooting` — port conflicts, debugger warnings, common runtime errors
-- `/plua-setup` — install, HC3 credentials, --init-qa, VS Code integration, CLI flags
-- `/quickapp-troubleshooting` — HTML in labels, UI callbacks, property persistence, HC3 vs plua differences
-- `/hc3vfs` — editing QA files in the VS Code hc3:// virtual filesystem (requires hc3-vfs extension)
+- `/flua-troubleshooting` — startup errors, HC3 connection issues, proxy callbacks, busy ports
+- `/flua-setup` — install, HC3 credentials, modes, VS Code integration, CLI flags, directives
+- `/quickapp-troubleshooting` — HTML in labels, UI callbacks, property persistence, HC3 vs flua differences
+- `/qwikchild` — QwikAppChild library: UID-based children, declarative initChildren, per-child UI
+- `/skill-creator` — create, improve, and evaluate skills
 ```
 
 ## Done
@@ -138,11 +139,3 @@ Type a slash command in Copilot chat for detailed reference:
 Report the following message to the user:
 
 > **QuickApp skills v1.1.0 installed successfully.**
-> Ask me anything about QuickApp development, or type a `/` command for detailed reference.
-> To check the installed version at any time, ask: *"what QuickApp skill version is installed?"*
-
-When a user asks **"what QuickApp skill version is installed?"** (or similar), look for the `Skill version:` line in the `## QuickApp Development Skills` section of `.github/copilot-instructions.md` and report that version number.
-
-Report:
-- How many files were downloaded (and any that failed)
-- Whether `.github/copilot-instructions.md` was created, updated, or had the section appended

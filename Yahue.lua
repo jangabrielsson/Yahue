@@ -4,8 +4,8 @@
 -- %%save:dist/Yahue.fqa
 --%%var:Hue_IP=config.Hue_ip
 --%%var:Hue_User=config.Hue_user
---%%conceal:Hue_User="<Hue app key>"
---%%var:language=en
+--%%clobber:Hue_User=<Hue app key>
+--%%var:language="en"
 --%%file:engine.lua,Engine
 --%%file:qwikchild.lua,qwickchild
 --%%file:devices.lua,App
@@ -23,7 +23,6 @@
 
 -- %%desktop:true
 -- %%offline:true
---%%proxy:true
 
 -- Hue resource kind → Fibaro QA type mapping
 -- ┌─────────────────────┬──────────────────────────────────┬────────────────────────────────────────────┐

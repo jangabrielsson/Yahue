@@ -4,7 +4,7 @@ Full reference for Network (19), Users (8), Alarms (16), Rooms (7), and Sections
 
 ---
 
-## Network (19 endpoints)
+## Network (24 endpoints)
 
 ### Interface Configuration
 - `GET /api/settings/network/interfaces` — List all network interfaces
@@ -66,7 +66,7 @@ Full reference for Network (19), Users (8), Alarms (16), Rooms (7), and Sections
 
 ---
 
-## Users (8 endpoints)
+## Users (10 endpoints)
 
 ### User Management
 - `GET /api/users` — List all users
@@ -97,7 +97,7 @@ Full reference for Network (19), Users (8), Alarms (16), Rooms (7), and Sections
 
 ---
 
-## Alarms (16 endpoints)
+## Alarms (14 endpoints)
 
 ### Partition Management
 - `GET /api/alarms/v1/partitions` — List all alarm partitions

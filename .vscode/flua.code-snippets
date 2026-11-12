@@ -1,0 +1,134 @@
+{
+  "QuickApp header": {
+    "scope": "lua",
+    "prefix": "qa-header",
+    "description": "flua QA: the --%% header + onInit skeleton",
+    "body": [
+      "--%%name:${1:MyQA}",
+      "--%%type:${2:com.fibaro.genericDevice}",
+      "--%%description:\"${3:My description}\"",
+      "",
+      "function QuickApp:onInit()",
+      "  self:debug(\"${1:MyQA} ready, id\", self.id)",
+      "  $0",
+      "end"
+    ]
+  },
+  "UI button": {
+    "scope": "lua",
+    "prefix": "qa-btn",
+    "description": "flua QA: a --%%u button + its callback",
+    "body": [
+      "--%%u:{button='${1:btn}',text='${2:Press me}',onReleased='${3:pressed}'}",
+      "",
+      "function QuickApp:${3:pressed}(event)",
+      "  $0",
+      "end"
+    ]
+  },
+  "UI label": {
+    "scope": "lua",
+    "prefix": "qa-label",
+    "description": "flua QA: a --%%u label (text is HTML)",
+    "body": ["--%%u:{label='${1:lbl}',text='${2:Status}'}"]
+  },
+  "UI slider": {
+    "scope": "lua",
+    "prefix": "qa-slider",
+    "description": "flua QA: a --%%u slider + its onChanged callback (values are strings)",
+    "body": [
+      "--%%u:{slider='${1:sld}',text='${2:Level}',min='0',max='100',value='50',onChanged='${3:changed}'}",
+      "",
+      "function QuickApp:${3:changed}(event)",
+      "  local value = tonumber(event.values[1])  -- string!",
+      "  $0",
+      "end"
+    ]
+  },
+  "UI switch": {
+    "scope": "lua",
+    "prefix": "qa-switch",
+    "description": "flua QA: a --%%u switch with the 5.221 split toggle events (values are strings)",
+    "body": [
+      "--%%u:{switch='${1:sw}',text='${2:Auto}',value='false',onToggleOn='${3:on}',onToggleOff='${4:off}'}",
+      "",
+      "function QuickApp:${3:on}(event)  -- event.values[1] == \"true\"",
+      "  $0",
+      "end",
+      "",
+      "function QuickApp:${4:off}(event)  -- event.values[1] == \"false\"",
+      "end"
+    ]
+  },
+  "UI select": {
+    "scope": "lua",
+    "prefix": "qa-select",
+    "description": "flua QA: a --%%u select + its onToggled callback (selectedItem matches option values)",
+    "body": [
+      "--%%u:{select='${1:sel}',text='${2:Mode}',onToggled='${3:picked}',options={{type='option',text='A',value='a'},{type='option',text='B',value='b'}}}",
+      "",
+      "function QuickApp:${3:picked}(event)",
+      "  local value = event.values[1]  -- the option value",
+      "  self:updateView('${1:sel}', 'selectedItem', value)",
+      "  $0",
+      "end"
+    ]
+  },
+  "HTTP request": {
+    "scope": "lua",
+    "prefix": "qa-http",
+    "description": "flua QA: net.HTTPClient GET with success/error callbacks",
+    "body": [
+      "local http = net.HTTPClient({ timeout = 10000 })",
+      "http:request(\"${1:http://host/api/path}\", {",
+      "  options = { method = \"GET\" },",
+      "  success = function(response)",
+      "    if response.status == 200 then",
+      "      local data = json.decode(response.data)",
+      "      $0",
+      "    end",
+      "  end,",
+      "  error = function(error)",
+      "    self:warning(\"http error:\", error)",
+      "  end,",
+      "})"
+    ]
+  },
+  "RefreshStateSubscriber": {
+    "scope": "lua",
+    "prefix": "qa-rs",
+    "description": "flua QA: a RefreshStateSubscriber with a filter + handler",
+    "body": [
+      "local events = RefreshStateSubscriber()",
+      "events:subscribe(",
+      "  function(event) return ${1:event.type == \"DevicePropertyUpdatedEvent\"} end,",
+      "  function(event)",
+      "    $0",
+      "  end",
+      ")",
+      "events:run()"
+    ]
+  },
+  "Simulated device": {
+    "scope": "lua",
+    "prefix": "qa-simdevice",
+    "description": "flua QA: load a bundled simulated device and drive it",
+    "body": [
+      "local ${1:dev} = _FLUA.loadSimDevice(\"${2|temperatureSensor,humiditySensor,lightSensor,motionSensor,doorSensor,windowSensor,smokeSensor,floodSensor,binarySwitch,multilevelSwitch,colorController,alarmPartition,player,weather,alarmEndpoint,alarmPanel|}\")",
+      "fibaro.call(${1:dev}, \"${3:setValue}\", ${4:value})",
+      "$0"
+    ]
+  },
+  "Self-test": {
+    "scope": "lua",
+    "prefix": "qa-selfassert",
+    "description": "flua QA: the self-asserting pattern (exit code is the verdict)",
+    "body": [
+      "function QuickApp:selfTest()",
+      "  $1",
+      "  print(\"VERDICT: all passed\")",
+      "  exit(0)",
+      "end"
+    ]
+  }
+}

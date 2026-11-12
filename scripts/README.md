@@ -95,8 +95,8 @@ Define what artifacts to build:
 
 ```bash
 declare -a ARTIFACTS=(
-    # Fibaro .fqa files using plua
-    "src/main.lua:dist/MyApp.fqa:plua -t pack {SOURCE} {OUTPUT}"
+    # Fibaro .fqa files using flua
+    "src/main.lua:dist/MyApp.fqa:flua -t pack {SOURCE} -o {OUTPUT} -f"
     
     # Zip archives
     "src/:dist/source.zip:zip -r {OUTPUT} {SOURCE}"
@@ -198,9 +198,9 @@ Creates forum post HTML for an existing GitHub release.
   gh auth login
   ```
 - **bash** 4.0+ - Script interpreter
-- **plua** (optional) - For building `.fqa` files for Fibaro
+- **flua** (optional) - For building `.fqa` files for Fibaro
   ```bash
-  pip install plua
+  # See https://github.com/jangabrielsson/flua for install instructions
   ```
 
 ## Project Structure
@@ -285,7 +285,7 @@ grep "^local VERSION" src/main.lua
 Verify:
 1. Source files exist
 2. Build commands work when run manually
-3. Required build tools are installed (plua, npm, etc.)
+3. Required build tools are installed (flua, npm, etc.)
 
 ## Tips
 

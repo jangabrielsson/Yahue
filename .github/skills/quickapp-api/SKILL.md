@@ -5,7 +5,7 @@ description: Full HC3 QuickApp Lua API reference: fibaro.* functions, QuickApp m
 
 # QuickApp Lua API Reference
 
-Complete reference for the Fibaro HC3 QuickApp Lua programming environment. Use this skill when writing QuickApp code with plua.
+Complete reference for the Fibaro HC3 QuickApp Lua programming environment. Use this skill when writing QuickApp code with flua.
 
 ---
 
@@ -41,6 +41,17 @@ self:updateProperty("log", "status msg") -- update log field
 ```
 Common property names: `value`, `dead`, `log`, `userDescription`.
 
+> **The property set is fixed by the type.** `updateProperty` on a
+> property the device type (and its interfaces) does not declare is
+> **silently ignored on the real HC3** — the QA looks like it works in
+> flua (the sim stores it, with a warning) and does nothing on the
+> controller. Declare what you need: the right `--%%type` or
+> `--%%interface:` (e.g. the `battery` interface declares
+> `batteryLevel`), QuickApp variables for dynamic values
+> (`self:setVariable`/`getVariable`), and `updateView` labels for
+> display. flua warns on both the runtime update and the `--check`
+> literal.
+
 ### QuickApp Variables
 ```lua
 local v = self:getVariable("myKey")   -- returns "" if not found (not nil!)
@@ -57,6 +68,10 @@ self:updateView("switchId", "value", "true")    -- "true" or "false" as string
 ```
 
 ### Children
+
+> Advanced child management (attach-or-create by UID, per-child classes and
+> UIs): the **qwikchild** library — `--%%file:$qwikchild.lua,qwikchild`, see
+> the qwikchild skill.
 ```lua
 -- Create a child device
 local child = self:createChildDevice({
@@ -134,12 +149,23 @@ fibaro.alert("push", {userId}, "msg")
 fibaro.emitCustomEvent("myEventName")     -- fire custom event
 ```
 
+Full notification landscape (direct push vs push-by-user vs simplePush vs e-mail vs
+notification centre, phone/user ID semantics, no critical push):
+`assets/notifications.md`.
+
 ### Logging (global)
 ```lua
 fibaro.debug(tag, message)
 fibaro.trace(tag, message)
 fibaro.warning(tag, message)
 fibaro.error(tag, message)
+```
+
+### urlencode (global)
+```lua
+urlencode(str)  -- HC3-style URL percent-encoding: "\n" becomes "\r\n" first,
+               -- space -> %20, unreserved -_.~ kept, other bytes -> %XX
+               -- (multibyte text encoded per UTF-8 byte). nil passes through.
 ```
 
 ---
@@ -172,6 +198,12 @@ api.delete("/globalVariables/oldVar")
 
 `api.*` returns the parsed JSON response (Lua table), or `nil` on error.
 
+> **Write safety:** `api.put` / `api.post` against HC3 have several
+> non-obvious silent-failure modes (partial array writes wipe siblings,
+> action POSTs return HTTP 202 even on failure, enum values get silently
+> coerced, etc.). Before writing non-trivial data via `api.*`, see the
+> **hc3-write-safety** skill for the read-modify-write + verify pattern.
+
 ---
 
 ## Timers and Scheduling
@@ -200,6 +232,35 @@ setTimeout(function() self:doSomething() end, 0)
 ---
 
 ## net.* — Networking in QuickApps
+
+**The mental model**: offline mode simulates the HC3's REST API — but
+`net.*` is **always real network**. A QA in the offline sim can still reach
+the internet, and that is the point (test your Hue/Tibber/weather
+integration without the controller). Mock the far end with `net.*Server`
+(flua extension) when you want determinism instead of real services.
+
+- **Routing**: a *completed* HTTP exchange — any status, 4xx/5xx included —
+  reaches `success`; only *transport* failures (DNS, refused, timeout)
+  reach `error`. The error argument is the underlying system message
+  (`"timed out"`, `"[Errno 61] Connection refused"`, ...) — match on
+  presence, not equality. TCP reads surface `"timeout"` / `"closed"` and
+  prefixed op errors (`"connect: ..."`, `"send: ..."`).
+- **SSE**: a `text/event-stream` response streams — `success` fires once per
+  **raw event block** (`{status, data, headers}`), the stream ends
+  **silently** when the server closes (HC3 behavior), and a mid-stream read
+  timeout is a transport failure → `error`. Real services send keepalives
+  just inside typical read timeouts (Hue ≈ every 58s) — treat mid-stream
+  timeouts as **transient**: catch and reconnect, don't fail the QA.
+- **WebSocketClientTls** verifies nothing by default — the HC3 offers no
+  way to supply a certificate for websockets (undocumented by Fibaro), so
+  self-signed bridge certs (Dirigera etc.) just work; flua matches that.
+  `connect(url, headers, {checkCertificate = true})` is the flua extension
+  that opts back into verification.
+- **exit()**: cancels the QA's in-flight requests — an open SSE stream dies
+  with its QA.
+- Full semantics and the mock-server API: USAGE.md "Network clients" and
+  "Mock servers"; living examples: `examples/http.lua`, `examples/tcp.lua`,
+  `examples/mockServer.lua`, `examples/scenes.lua`.
 
 ### HTTP Client
 ```lua
@@ -249,24 +310,60 @@ local t = json.decode('{"key": "value", "num": 42}')
 local s = json.encode({ key = "value", num = 42 })
 ```
 
-### Availability: plua vs HC3
-| Function | plua | HC3 |
+### Availability: flua vs HC3
+| Function | flua | HC3 |
 |---|---|---|
 | `json.encode(t)` | ✓ | ✓ |
 | `json.decode(s)` | ✓ | ✓ |
-| `json.encodeFormated(t)` | ✓ | ✗ — **plua only** |
+| `json.encodeFormated(t)` | ✓ | ✗ — **flua only** |
 | `json.util.InitArray(t)` | ✓ | ✓ |
 
-> **`json.encodeFormated`** produces pretty-printed JSON but is only available in plua. Do **not** use it in code intended to run on a real HC3 — it will throw a nil-call error. If you need formatted output on the HC3, provide your own implementation.
+> **`json.encodeFormated`** produces pretty-printed JSON but is only available in flua. Do **not** use it in code intended to run on a real HC3 — it will throw a nil-call error. If you need formatted output on the HC3, provide your own implementation.
 
 ### Marking tables as arrays: `json.util.InitArray`
-By default, an empty or mixed Lua table may encode as `{}` (object) rather than `[]` (array). Use `json.util.InitArray` to force array encoding — this is available on **both plua and real HC3** and is essential when posting to REST APIs that require a JSON array:
+By default, an empty or mixed Lua table may encode as `{}` (object) rather than `[]` (array). Use `json.util.InitArray` to force array encoding — this is available on **both flua and the real HC3** and is essential when posting to REST APIs that require a JSON array:
 
 ```lua
 local arr = json.util.InitArray({})          -- encodes as [] not {}
 local items = json.util.InitArray({"a","b"}) -- encodes as ["a","b"]
 api.post("/foo", { ids = json.util.InitArray({}) })
 ```
+
+#### Fields that MUST be array-encoded when uploading an FQA
+
+When building an FQA structure to POST to `/api/quickApp/`, several
+nested fields are array-typed on HC3. If any of them is empty (or
+sparse), the JSON encoder will emit `{}` and HC3 will reject the upload
+or silently treat the field as missing. Mark them as arrays before
+encoding:
+
+```lua
+local function markArray(t) if type(t)=='table' then json.util.InitArray(t) end end
+
+markArray(fqa.initialInterfaces)
+markArray(fqa.initialProperties.quickAppVariables)
+markArray(fqa.initialProperties.uiView)
+markArray(fqa.initialProperties.uiCallbacks)
+markArray(fqa.initialProperties.supportedDeviceRoles)
+
+fqa.initialProperties.apiVersion = "1.3"
+api.post("/quickApp/", json.encode(fqa))
+```
+
+A hand-built package must also carry `initialProperties.apiVersion`
+("1.3"): the JSON create preserves a marked package verbatim — custom
+`uiCallbacks` included — while a marker-less package is treated as
+legacy and its UI callbacks are re-derived with generated default names
+(`ui<b2>OnReleased`, buttons die with "Class does not have uib2OnReleased
+function defined"). flua's own pack writes the marker automatically, and
+`POST /quickApp/import` preserves verbatim regardless of it — see the
+hc3-rest-api skill.
+
+The same care applies whenever you PUT an array-valued property back to
+`/api/devices/{id}` (e.g. `properties.quickAppVariables`,
+`properties.uiCallbacks`) — see the **hc3-write-safety** skill for the
+full list of array-valued properties and the read-modify-write pattern
+needed to avoid wiping siblings.
 
 ---
 
@@ -293,3 +390,16 @@ api.post("/foo", { ids = json.util.InitArray({}) })
 - All QuickApp methods are publicly callable via `fibaro.call(id, "method")` — keep private helpers as `local function`s outside the class
 - `self.parent` is **not** available during `Child:__init()` — use child's `onInit()` instead
 - `quickApp` global is only set after `onInit()` returns
+
+---
+
+## See also
+
+- **hc3-write-safety** — silent-failure hazards on `api.put` / `api.post`
+  writes (partial array wipes, enum coercion, Z-wave cache-only writes,
+  HTTP-202 action failures) and the defensive read-modify-write pattern.
+- **hc3-rest-api** — full HC3 REST endpoint reference.
+- **quickapp-patterns** — common QA implementation patterns (timer
+  loops, refreshStates, child devices).
+- **quickapp-troubleshooting** — known QA quirks and HC3 firmware
+  behaviour differences.

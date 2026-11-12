@@ -1,37 +1,40 @@
 --%%name:Weather
 --%%type:com.fibaro.weather
---%%description:Weather station template
---%%var:pollInterval=300
+--%%description:"My description"
 
--- No actions to handle.
--- Property names are CAPITALISED: Temperature, Humidity, Wind, ConditionCode, WeatherCondition
--- Temperature/Wind use {value=n, unit="C"} format; Humidity is a plain number.
--- Conditions: "unknown","clear","rain","snow","storm","cloudy","partlyCloudy","fog"
+-- Weather type have no actions to handle
+-- To update temperature, update property "Temperature" with floating point number, supported units: "C" - Celsius, "F" - Fahrenheit
+-- To update humidity, update property "Humidity" with floating point number
+-- To update wind speed, update property "Wind" with floating point number
+-- Eg. self:updateProperty("Temperature", { value= 18.12, unit= "C" })
+-- To update weather condition, update properties "ConditionCode" and "WeatherCondition" or use method QuickApp:setCondition
+-- Eg. self:setCondition("clear")
 
-local conditionCodes = {
-    unknown=3200, clear=32, rain=40, snow=38,
-    storm=4, cloudy=30, partlyCloudy=30, fog=20,
-}
-
+-- Posible conditions: "unknown", "clear", "rain", "snow", "storm", "cloudy", "partlyCloudy", "fog"
 function QuickApp:setCondition(condition)
-    local code = conditionCodes[condition]
-    if code then
+    local conditionCodes = { 
+        unknown = 3200,
+        clear = 32,
+        rain = 40,
+        snow = 38,
+        storm = 4,
+        cloudy = 30,
+        partlyCloudy = 30,
+        fog = 20,
+    }
+
+    local conditionCode = conditionCodes[condition]
+
+    if conditionCode then
+        self:updateProperty("ConditionCode", conditionCode)
         self:updateProperty("WeatherCondition", condition)
-        self:updateProperty("ConditionCode", code)
     end
 end
 
-function QuickApp:poll()
-    -- replace with real data source / HTTP call
-    self:updateProperty("Temperature", {value=18.5, unit="C"})
-    self:updateProperty("Humidity", 62)
-    self:updateProperty("Wind", 5.2)
-    self:setCondition("partlyCloudy")
-end
-
 function QuickApp:onInit()
-    self:debug(self.name, self.id)
-    local interval = tonumber(self:getVariable("pollInterval")) * 1000
-    setTimeout(function() self:poll() end, 100)
-    setInterval(function() self:poll() end, interval)
-end
+    self:debug(self.name,self.id)
+    if not api.get("/devices/"..self.id).enabled then
+        self:debug(self.name,self.id,"Device is disabled")
+        return
+    end
+end 
