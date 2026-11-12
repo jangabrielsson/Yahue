@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.78] - 2026-11-12
+
+## Changes in v0.2.78
+
+- ✨ **Feature**: add net module with HTTP, TCP, UDP, and WebSocket clients feat: configure Lua language server settings in .luarc.json chore: remove outdated commit examples from .vscode chore: add recommended extensions for VSCode feat: create code snippets for QuickApp development in flua chore: update launch configurations for flua debugging in VSCode chore: remove legacy settings.json file from VSCode chore: add task for uploading files to HC3 using flua docs: add AGENTS.md for QuickApp development guidance chore: update Yahue.lua to use clobber for sensitive data refactor: remove emulated event fetching logic from hue-transport.lua fix: update qwikchild.lua to check for _FLUA instead of fibaro.plua docs: update README.md to reflect changes in build commands for flua chore: modify create-release.sh to check for flua instead of plua chore: update project-config.sh for flua build commands chore: update project-config.sh.example for flua build commands fix: update test/testhue.lua usage instructions for flua
+- ✨ **Feature**: add forum post helper for release v0.2.77 with copy functionality
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.77] - 2026-08-12
 
 ## Changes in v0.2.77
