@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.79] - 2026-11-22
+
+## Changes in v0.2.79
+
+- ✨ **Feature**: convenience_area_motion added
+- ✨ **Feature**: add forum post helper for release v0.2.78 with copy functionality
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.78] - 2026-11-12
 
 ## Changes in v0.2.78
