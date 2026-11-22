@@ -138,6 +138,7 @@ local function main()
           if not warnedTypes[typ] then
             warnedTypes[typ] = true
             WARNING("Missing resource type:%s (further events for this type will be ignored)",typ)
+            --print(json.encodeFormatted(rsrc))
           end
           return
         end

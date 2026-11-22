@@ -57,7 +57,10 @@ local function buildChildren(ddevices, tags)
           if ok then uiVer = v end
         end
         children[tag] = {
-          name = dev.name,
+          -- Discovery loop already resolved the display name (including
+          -- owner fallback for e.g. convenience_area_motion); use that
+          -- rather than the raw resource's .name field.
+          name = data.name,
           type = HUE.typeOverrides[data.id] or (cls and cls.htype) or "com.fibaro.deviceController",
           className = data.class,
           interfaces = dev:getProps()['power_state'] and {'battery'} or nil,
@@ -105,10 +108,10 @@ function HUE:app()
     local tag = "RoomZoneQA:"..id
     ddevices[tag] = { name=zr.name or tag, id=id, class=pickRoomZoneClass(id) }
   end
-  for id,_ in pairs(HUE:getResourceType('motion_area_configuration')) do
+  for id,_ in pairs(HUE:getResourceType('convenience_area_motion')) do
     local dev = HUE:getResource(id)
-    local tag = "MotionAreaSensor:"..id
-    ddevices[tag] = { name=dev:getName("MotionArea-"..id:sub(1,8)), id=id, class="MotionAreaSensor" }
+    local tag = "MotionSensor:"..id
+    ddevices[tag] = { name=dev:getName("Motion-"..id:sub(1,8)), id=id, class="MotionSensor" }
   end
   HUE._ddevices = ddevices
 

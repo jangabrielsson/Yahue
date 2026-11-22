@@ -701,6 +701,40 @@ function fibaro.hueResources.define(ctx)
     return fmt("[camera_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
   end
   
+  props.convenience_area_motion = {
+    motion={
+      get=function(r) return PGET('motion.motion',r,false) end,
+      set=function(r,v) PSET('motion.motion',r,v) end,
+      changed=function(o,n) local ov,nv = PGET('motion.motion',o), PGET('motion.motion',n) return nv~=ov,nv end
+    },
+  }
+  local convenience_area_motion = defClass('convenience_area_motion',hueResource)
+  function convenience_area_motion:__init(id)
+    hueResource.__init(self,id)
+  end
+  function convenience_area_motion:motion()
+    return PGET('motion.motion',self.rsrc,false)
+  end
+  function convenience_area_motion:__tostring()
+    return fmt("[convenience_area_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
+  end
+  
+  local motion_area_configuration = defClass('motion_area_configuration',hueResource)
+  function motion_area_configuration:__init(rsrc)
+    hueResource.__init(self,rsrc)
+  end
+  -- This type carries its display name at the top level (not under metadata).
+  -- It is registered so services like convenience_area_motion can resolve
+  -- their name through hueResource:getName's owner fallback; it is not
+  -- mapped to a child QA.
+  function motion_area_configuration:setup(rsrc)
+    hueResource.setup(self,rsrc)
+    self.name = rsrc.name or self.name
+  end
+  function motion_area_configuration:__tostring()
+    return fmt("[motion_area_configuration:%s,%s]",self.id,self.name or "?")
+  end
+  
   props.light_level = {
     light={
       get=function(r) return PGET('light.light_level_report.light_level',r,0) end,

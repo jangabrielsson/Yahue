@@ -40,6 +40,10 @@
 -- │ ColorLight          │ com.fibaro.colorController       │ light: on + dimming + color (xy)           │
 -- │ RoomZoneQA          │ com.fibaro.multilevelSwitch      │ room or zone resource                      │
 -- └─────────────────────┴──────────────────────────────────┴────────────────────────────────────────────┘
+-- MotionSensor also maps the standalone 'convenience_area_motion' resource type
+-- (area-motion services exposed as individual motion sensors).
+-- 'motion_area_configuration' is a known resource (name container for area
+-- motion services) but is not mapped to a QA.
 
 fibaro.debugFlags = fibaro.debugFlags or {}
 local debug = fibaro.debugFlags
