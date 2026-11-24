@@ -19,6 +19,11 @@ function fibaro.hueResources.define(ctx)
   ---------------------------------------------------------------------------
   -- RESOURCE CLASS DEFINITIONS
   ---------------------------------------------------------------------------
+  -- Types whose state changes can arrive as full-resource re-sends (SSE 'add'
+  -- events and the periodic GET refresh) instead of partial 'update' events.
+  -- For these, modified() publishes changed props; for all other types it
+  -- only swaps the stored state.
+  local publishOnModify = { convenience_area_motion = true }
   local hueResource = defClass('hueResource')
   function hueResource:__init(rsrc) self:setup(rsrc) end
   
@@ -57,7 +62,19 @@ function fibaro.hueResources.define(ctx)
   end
   function hueResource:added() DEBUG('resource_mgmt',"Created %s",tostring(self)) end
   function hueResource:deleted() DEBUG('resource_mgmt',"Deleted %s",tostring(self)) end
-  function hueResource:modified(rsrc) self:setup(rsrc) DEBUG('resource_mgmt',"Modified %s",tostring(self)) end
+  function hueResource:modified(rsrc)
+    local old = self.rsrc
+    self:setup(rsrc)
+    if publishOnModify[self.type] and self._props and old then
+      for k,f in pairs(self._props) do
+        if f.changed then
+          local c,v = f.changed(old,rsrc)
+          if c then self:publish(k,v) end
+        end
+      end
+    end
+    DEBUG('resource_mgmt',"Modified %s",tostring(self))
+  end
   function hueResource:findServiceByType(typ)
     local r = {}
     for _,s in ipairs(self.services or {}) do local x=resolve(s) if x.type==typ then r[#r+1]=x end end
@@ -701,19 +718,44 @@ function fibaro.hueResources.define(ctx)
     return fmt("[camera_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
   end
   
+  -- convenience_area_motion reports motion either as motion.motion (its own
+  -- resource shape, as in GET /clip/v2/resource) or, on some bridge event
+  -- payloads, as motion.motion_report.motion (the standard motion event
+  -- format). Read both, so updates arrive regardless of which shape the
+  -- event uses; unknown shapes are logged.
+  local function camMotion(r)
+    local v = PGET('motion.motion',r)
+    if v == nil then v = PGET('motion.motion_report.motion',r) end
+    return v
+  end
   props.convenience_area_motion = {
     motion={
-      get=function(r) return PGET('motion.motion',r,false) end,
+      get=function(r) return camMotion(r) or false end,
       set=function(r,v) PSET('motion.motion',r,v) end,
-      changed=function(o,n) local ov,nv = PGET('motion.motion',o), PGET('motion.motion',n) return nv~=ov,nv end
+      -- Only publish when both sides carry a comparable value; otherwise a
+      -- fragment without a motion value would publish nil as a change.
+      changed=function(o,n) local ov,nv = camMotion(o), camMotion(n) if nv==nil or ov==nil then return false,nil end return nv~=ov,nv end
     },
   }
   local convenience_area_motion = defClass('convenience_area_motion',hueResource)
+  local warnedMotionShapes = {}
   function convenience_area_motion:__init(id)
     hueResource.__init(self,id)
   end
   function convenience_area_motion:motion()
-    return PGET('motion.motion',self.rsrc,false)
+    return camMotion(self.rsrc) or false
+  end
+  function convenience_area_motion:event(data)
+    if data.motion ~= nil and camMotion(data) == nil then
+      -- Log once per unrecognised shape so a bridge sending a different
+      -- event format is visible without flooding the log.
+      local key = json.encode(data.motion)
+      if not warnedMotionShapes[key] then
+        warnedMotionShapes[key] = true
+        WARNING("convenience_area_motion event with unrecognised motion payload: %s",key)
+      end
+    end
+    hueResource.event(self,data)
   end
   function convenience_area_motion:__tostring()
     return fmt("[convenience_area_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)

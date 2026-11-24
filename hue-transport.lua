@@ -28,6 +28,11 @@ function fibaro.hueTransport.define(ctx)
   local cooldownDefault = ctx.cooldownDefault
   local recent429 = ctx.recent429
 
+  -- Diagnostics: warn once per unregistered motion-area resource an event
+  -- references, so delivery under an unexpected id (area config, candidate,
+  -- ...) is visible in field logs instead of silently dropped.
+  local warnedMotionEvents = {}
+
   ---------------------------------------------------------------------------
   -- SSE EVENT POLLING
   ---------------------------------------------------------------------------
@@ -54,8 +59,15 @@ function fibaro.hueTransport.define(ctx)
             d:annotateEvent(r)
             d:event(r)
           else
-            local _ = 0
-            if debugFlags and debugFlags.unknownType then WARNING("Unknow resource type: %s",json.encode(e1)) end
+            if r and (r.type=="convenience_area_motion" or r.type=="security_area_motion" or r.type=="motion_area_configuration" or r.type=="motion_area_candidate") then
+              local key = r.type..":"..tostring(r.id)
+              if not warnedMotionEvents[key] then
+                warnedMotionEvents[key] = true
+                WARNING("Event for unregistered motion-area resource %s (%s): %s",tostring(r.id),r.type,json.encode(r))
+              end
+            elseif debugFlags and debugFlags.unknownType then
+              WARNING("Unknow resource type: %s",json.encode(e1))
+            end
           end
         end
       elseif e1.type == 'delete' then
