@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.2.80] - 2026-11-24
+
+## Changes in v0.2.80
+
+- ✨ **Feature**: fix convenience_area_motion
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.79] - 2026-11-22
 
 ## Changes in v0.2.79
