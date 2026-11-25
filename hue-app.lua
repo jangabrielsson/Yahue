@@ -113,6 +113,11 @@ function HUE:app()
     local tag = "MotionSensor:"..id
     ddevices[tag] = { name=dev:getName("Motion-"..id:sub(1,8)), id=id, class="MotionSensor" }
   end
+  for id,_ in pairs(HUE:getResourceType('security_area_motion')) do
+    local dev = HUE:getResource(id)
+    local tag = "MotionSensor:"..id
+    ddevices[tag] = { name=dev:getName("Motion-"..id:sub(1,8)).." (security)", id=id, class="MotionSensor" }
+  end
   HUE._ddevices = ddevices
 
   -- Step 3+4: Sync children — skip any stored UIDs whose Hue resource no longer exists

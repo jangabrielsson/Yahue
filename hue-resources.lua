@@ -23,7 +23,7 @@ function fibaro.hueResources.define(ctx)
   -- events and the periodic GET refresh) instead of partial 'update' events.
   -- For these, modified() publishes changed props; for all other types it
   -- only swaps the stored state.
-  local publishOnModify = { convenience_area_motion = true }
+  local publishOnModify = { convenience_area_motion = true, security_area_motion = true }
   local hueResource = defClass('hueResource')
   function hueResource:__init(rsrc) self:setup(rsrc) end
   
@@ -718,11 +718,11 @@ function fibaro.hueResources.define(ctx)
     return fmt("[camera_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
   end
   
-  -- convenience_area_motion reports motion either as motion.motion (its own
-  -- resource shape, as in GET /clip/v2/resource) or, on some bridge event
-  -- payloads, as motion.motion_report.motion (the standard motion event
-  -- format). Read both, so updates arrive regardless of which shape the
-  -- event uses; unknown shapes are logged.
+  -- convenience_area_motion and security_area_motion report motion either as
+  -- motion.motion (their own resource shape, as in GET /clip/v2/resource) or,
+  -- on some bridge event payloads, as motion.motion_report.motion (the
+  -- standard motion event format). Read both, so updates arrive regardless
+  -- of which shape the event uses; unknown shapes are logged.
   local function camMotion(r)
     local v = PGET('motion.motion',r)
     if v == nil then v = PGET('motion.motion_report.motion',r) end
@@ -759,6 +759,34 @@ function fibaro.hueResources.define(ctx)
   end
   function convenience_area_motion:__tostring()
     return fmt("[convenience_area_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
+  end
+  
+  props.security_area_motion = {
+    motion={
+      get=function(r) return camMotion(r) or false end,
+      set=function(r,v) PSET('motion.motion',r,v) end,
+      changed=function(o,n) local ov,nv = camMotion(o), camMotion(n) if nv==nil or ov==nil then return false,nil end return nv~=ov,nv end
+    },
+  }
+  local security_area_motion = defClass('security_area_motion',hueResource)
+  function security_area_motion:__init(id)
+    hueResource.__init(self,id)
+  end
+  function security_area_motion:motion()
+    return camMotion(self.rsrc) or false
+  end
+  function security_area_motion:event(data)
+    if data.motion ~= nil and camMotion(data) == nil then
+      local key = json.encode(data.motion)
+      if not warnedMotionShapes[key] then
+        warnedMotionShapes[key] = true
+        WARNING("security_area_motion event with unrecognised motion payload: %s",key)
+      end
+    end
+    hueResource.event(self,data)
+  end
+  function security_area_motion:__tostring()
+    return fmt("[security_area_motion:%s,%s,value:%s]",self.id,self:getName(),self:motion() or false)
   end
   
   local motion_area_configuration = defClass('motion_area_configuration',hueResource)

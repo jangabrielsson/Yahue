@@ -121,7 +121,7 @@ function fibaro.hueStartup.define(ctx)
         local typ = r.rsrc and r.rsrc.type
         -- Skip input-only types: re-publishing their last event
         -- would trigger false button presses / rotary events on restart.
-        if typ ~= "button" and typ ~= "relative_rotary" and typ ~= "motion" and typ ~= "convenience_area_motion" and typ ~= "motion_area_configuration" then
+        if typ ~= "button" and typ ~= "relative_rotary" and typ ~= "motion" and typ ~= "convenience_area_motion" and typ ~= "security_area_motion" and typ ~= "motion_area_configuration" then
           pcall(function() r:publishAll() end)
         end
       end
@@ -189,7 +189,7 @@ function fibaro.hueStartup.define(ctx)
   end
   local filter1 = { device=1, scene=10, room=2, zone=3 }
   
-  local filter2 = { device=1, light=4, button=5, relative_rotary=5.5, scene=10, room=2, zone=3, temperature=6, light_level=7, motion=8, convenience_area_motion=8, motion_area_configuration=8, tamper=7.5, contact=7.6, grouped_light=9, zigbee_connectivity=10, device_power=11 }
+  local filter2 = { device=1, light=4, button=5, relative_rotary=5.5, scene=10, room=2, zone=3, temperature=6, light_level=7, motion=8, convenience_area_motion=8, security_area_motion=8, motion_area_configuration=8, tamper=7.5, contact=7.6, grouped_light=9, zigbee_connectivity=10, device_power=11 }
   
   local function printBuffer(init) 
     local b = {init}
