@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.2.81] - 2026-11-25
+
+## Changes in v0.2.81
+
+- ✨ **Feature**: note
+- ✨ **Feature**: security_area_motion added
+  - Some bridges report area motion on the security service of the motion
+  - area configuration instead of the convenience service. Register
+  - security_area_motion like convenience_area_motion (same dual-shape
+  - motion reader, publish-on-modify, unknown-shape warning) and map it to a
+  - motionSensor child named '<area> (security)'.
+  - Also add it to the reconnect re-publish skip list and the Dump filter.
+
+
+*Generated automatically from git commits*
+
 ## [v0.2.80] - 2026-11-24
 
 ## Changes in v0.2.80
